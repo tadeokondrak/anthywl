@@ -13,7 +13,6 @@
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 #include <wayland-client.h>
-#include <xkbcommon/xkbcommon-compose.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "input-method-unstable-v2-client-protocol.h"
@@ -62,8 +61,6 @@ struct anthywl_seat {
     struct xkb_context *xkb_context;
     struct xkb_keymap *xkb_keymap;
     struct xkb_state *xkb_state;
-    struct xkb_compose_table *xkb_compose_table;
-    struct xkb_compose_state *xkb_compose_state;
 
     // wl_seat
     char *name;
@@ -652,8 +649,6 @@ static void anthywl_seat_destroy(struct anthywl_seat *seat) {
     free(seat->pending_surrounding_text);
     free(seat->surrounding_text);
     free(seat->name);
-    xkb_compose_state_unref(seat->xkb_compose_state);
-    xkb_compose_table_unref(seat->xkb_compose_table);
     xkb_state_unref(seat->xkb_state);
     xkb_keymap_unref(seat->xkb_keymap);
     xkb_context_unref(seat->xkb_context);
@@ -978,21 +973,9 @@ static void zwp_input_method_keyboard_grab_v2_keymap(void *data,
     char *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
     xkb_keymap_unref(seat->xkb_keymap);
     xkb_state_unref(seat->xkb_state);
-    xkb_compose_table_unref(seat->xkb_compose_table);
-    xkb_compose_state_unref(seat->xkb_compose_state);
     seat->xkb_keymap = xkb_keymap_new_from_string(seat->xkb_context, map,
         XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
     seat->xkb_state = xkb_state_new(seat->xkb_keymap);
-
-    char const *locale = getenv("LC_ALL");
-    if (!locale) locale = getenv("LC_CTYPE");
-    if (!locale) locale = getenv("LANG");
-    if (!locale) locale = "C";
-
-    seat->xkb_compose_table = xkb_compose_table_new_from_locale(
-        seat->xkb_context, locale, XKB_COMPOSE_COMPILE_NO_FLAGS);
-    seat->xkb_compose_state = xkb_compose_state_new(
-        seat->xkb_compose_table, XKB_COMPOSE_STATE_NO_FLAGS);
 
     close(fd);
     munmap(map, size);
