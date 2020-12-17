@@ -379,18 +379,6 @@ static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
     wl_surface_commit(seat->wl_surface);
 }
 
-static void wl_callback_done(void *data, struct wl_callback *wl_callback,
-    uint32_t callback_data)
-{
-    struct anthywl_seat *seat = data;
-    wl_callback_destroy(wl_callback);
-    anthywl_seat_draw_popup(seat);
-}
-
-static struct wl_callback_listener const wl_callback_listener = {
-    .done = wl_callback_done,
-};
-
 static void anthywl_buffer_init(struct anthywl_buffer *buffer) {
     buffer->text = calloc(1, 1);
     buffer->len = 0;
