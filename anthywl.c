@@ -97,6 +97,7 @@ struct anthywl_seat {
     // popup
     struct wl_surface *wl_surface;
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2;
+    bool show_preedit;
 };
 
 static void wl_buffer_release(void *data, struct wl_buffer *wl_buffer) {
@@ -264,7 +265,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
     double max_x = 0;
     cairo_move_to(recording_cairo, x, y);
 
-    {
+    if (seat->show_preedit) {
         GString *markup = g_string_new(NULL);
         for (int i = 0; i < seat->segment_count; i++) {
             struct anthy_segment_stat segment_stat;
@@ -292,13 +293,11 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
         cairo_set_source_rgba(recording_cairo, 1.0, 1.0, 1.0, 1.0);
         pango_cairo_update_layout(recording_cairo, layout);
         pango_cairo_show_layout(recording_cairo, layout);
-        cairo_move_to(recording_cairo, x, y);
-    }
-    {
         line_y = y + PADDING + BORDER / 2.0;
         y += BORDER + PADDING * 2.0;
         cairo_move_to(recording_cairo, x, y);
     }
+
     {
         struct anthy_segment_stat segment_stat;
         anthy_get_segment_stat(seat->anthy_context, seat->current_segment, &segment_stat);
@@ -332,11 +331,13 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
     double half_border = BORDER / 2.0;
 
-    cairo_move_to(recording_cairo, half_border, line_y);
-    cairo_line_to(recording_cairo, max_x, line_y);
-    cairo_set_line_width(recording_cairo, BORDER);
-    cairo_set_source_rgba(recording_cairo, 1.0, 1.0, 1.0, 1.0);
-    cairo_stroke(recording_cairo);
+    if (seat->show_preedit) {
+        cairo_move_to(recording_cairo, half_border, line_y);
+        cairo_line_to(recording_cairo, max_x, line_y);
+        cairo_set_line_width(recording_cairo, BORDER);
+        cairo_set_source_rgba(recording_cairo, 1.0, 1.0, 1.0, 1.0);
+        cairo_stroke(recording_cairo);
+    }
 
     cairo_move_to(recording_cairo, half_border, half_border);
     cairo_line_to(recording_cairo, max_x - half_border, half_border);
@@ -365,7 +366,7 @@ static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
     struct anthywl_graphics_buffer *buffer = NULL;
     if (seat->is_selecting)
         buffer = anthywl_seat_selecting_draw_popup(seat);
-    else if (seat->is_composing && seat->buffer.len != 0)
+    else if (seat->is_composing && seat->buffer.len != 0 && seat->show_preedit)
         buffer = anthywl_seat_composing_draw_popup(seat);
 
     if (buffer) {
@@ -731,6 +732,10 @@ static bool anthywl_seat_composing_handle_key_event(
         anthywl_buffer_clear(&seat->buffer);
         anthywl_seat_composing_update(seat);
         return true;
+    case XKB_KEY_Menu:
+        seat->show_preedit = !seat->show_preedit;
+        anthywl_seat_composing_update(seat);
+        return true;
     case XKB_KEY_Escape:
         if (seat->buffer.len == 0)
             return false;
@@ -904,6 +909,10 @@ static bool anthywl_seat_selecting_handle_key_event(
     case XKB_KEY_F8:
     case XKB_KEY_F9:
     case XKB_KEY_F10:
+        return true;
+    case XKB_KEY_Menu:
+        seat->show_preedit = !seat->show_preedit;
+        anthywl_seat_selecting_update(seat);
         return true;
     case XKB_KEY_space:
         if (seat->selected_candidates[seat->current_segment]
