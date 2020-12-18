@@ -31,6 +31,7 @@ subdir('protocol')
 anthywl_bin = executable(
     'anthywl',
     'anthywl.c',
+    'buffer.c',
     dependencies: [
         wayland_client_dep,
         xkbcommon_dep,
