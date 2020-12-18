@@ -280,8 +280,8 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
             struct anthy_segment_stat segment_stat;
             anthy_get_segment_stat(seat->anthy_context, i, &segment_stat);
             char buf[64];
-            anthy_get_segment(seat->anthy_context, i, seat->selected_candidates[i],
-                buf, sizeof buf);
+            anthy_get_segment(seat->anthy_context,
+                i, seat->selected_candidates[i], buf, sizeof buf);
             char *markup_fragment;
             if (i == seat->current_segment)
                 markup_fragment = g_markup_printf_escaped("<b>%s</b>", buf);
@@ -309,7 +309,8 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
     {
         struct anthy_segment_stat segment_stat;
-        anthy_get_segment_stat(seat->anthy_context, seat->current_segment, &segment_stat);
+        anthy_get_segment_stat(
+            seat->anthy_context, seat->current_segment, &segment_stat);
         char buf[64];
         for (int i = 0; i < segment_stat.nr_candidate; i++) {
             anthy_get_segment(
@@ -405,7 +406,9 @@ static void anthywl_buffer_clear(struct anthywl_buffer *buffer) {
     buffer->pos = 0;
 }
 
-static void anthywl_buffer_append(struct anthywl_buffer *buffer, char const *text) {
+static void anthywl_buffer_append(
+    struct anthywl_buffer *buffer, char const *text)
+{
     size_t text_len = strlen(text);
     buffer->text = realloc(buffer->text, buffer->len + text_len + 1);
     if (buffer->pos == 0) {
@@ -871,7 +874,8 @@ static bool anthywl_seat_selecting_handle_key_event(
     assert(conv_stat.nr_segment == seat->segment_count);
 
     struct anthy_segment_stat segment_stat;
-    anthy_get_segment_stat(seat->anthy_context, seat->current_segment, &segment_stat);
+    anthy_get_segment_stat(
+        seat->anthy_context, seat->current_segment, &segment_stat);
 
     switch (keysym) {
     case XKB_KEY_Shift_L:
@@ -1237,136 +1241,144 @@ static struct wl_registry_listener const wl_registry_listener = {
     .global_remove = wl_registry_global_remove,
 };
 
-static bool interrupted;
-static void sigint(int signal) { interrupted = true; }
-
-int main() {
-    int rc = 1;
-
-    if (anthy_init() != 0) {
-        perror("anthy_init");
-        goto end;
-    }
-    atexit(anthy_quit);
-
-    struct anthywl_state state = { 0 };
-    wl_list_init(&state.seats);
-    wl_list_init(&state.buffers);
-    wl_list_init(&state.timers);
+static bool anthywl_state_init(struct anthywl_state *state) {
+    wl_list_init(&state->seats);
+    wl_list_init(&state->buffers);
+    wl_list_init(&state->timers);
  
-    state.wl_display = wl_display_connect(NULL);
-    if (state.wl_display == NULL) {
+    state->wl_display = wl_display_connect(NULL);
+    if (state->wl_display == NULL) {
         perror("wl_display_connect");
-        goto end;
+        return false;
     }
 
-    state.wl_registry = wl_display_get_registry(state.wl_display);
-    wl_registry_add_listener(state.wl_registry, &wl_registry_listener, &state);
-    wl_display_roundtrip(state.wl_display);
+    state->wl_registry = wl_display_get_registry(state->wl_display);
+    wl_registry_add_listener(state->wl_registry, &wl_registry_listener, state);
+    wl_display_roundtrip(state->wl_display);
 
-    if (state.wl_compositor == NULL) {
+    if (state->wl_compositor == NULL) {
         fprintf(stderr, "Missing protocol: wl_compositor\n");
-        goto end;
+        return false;
     }
 
-    if (state.wl_shm == NULL) {
+    if (state->wl_shm == NULL) {
         fprintf(stderr, "Missing protocol: wl_shm\n");
-        goto end;
+        return false;
     }
 
-    if (state.zwp_input_method_manager_v2 == NULL) {
+    if (state->zwp_input_method_manager_v2 == NULL) {
         fprintf(stderr, "Missing protocol: zwp_input_method_manager_v2\n");
-        goto end;
+        return false;
     }
 
-    if (state.zwp_virtual_keyboard_manager_v1 == NULL) {
+    if (state->zwp_virtual_keyboard_manager_v1 == NULL) {
         fprintf(stderr, "Missing protocol: zwp_virtual_keyboard_manager_v1\n");
-        goto end;
+        return false;
     }
 
     struct anthywl_seat *seat;
-    wl_list_for_each(seat, &state.seats, link)
+    wl_list_for_each(seat, &state->seats, link)
         anthywl_seat_init_protocols(seat);
 
-    wl_display_flush(state.wl_display);
+    wl_display_flush(state->wl_display);
 
-    state.running = true;
+    return true;
+}
+
+static bool interrupted;
+static void sigint(int signal) { interrupted = true; }
+
+static int anthywl_state_next_timer(struct anthywl_state *state) {
+    int timeout = INT_MAX;
+    if (wl_list_empty(&state->timers))
+        return -1;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    struct anthywl_timer *timer;
+    wl_list_for_each(timer, &state->timers, link) {
+        int time =
+            (timer->time.tv_sec - now.tv_sec) * 1000 +
+            (timer->time.tv_nsec - now.tv_nsec) / 1000000;
+        if (time < timeout)
+            timeout = time;
+    }
+    return timeout;
+}
+
+static void anthywl_state_run_timers(struct anthywl_state *state) {
+    if (wl_list_empty(&state->timers))
+        return;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    struct anthywl_timer *timer, *tmp;
+    wl_list_for_each_safe(timer, tmp, &state->timers, link) {
+        bool expired = timer->time.tv_sec < now.tv_sec ||
+            (timer->time.tv_sec == now.tv_sec &&
+             timer->time.tv_nsec < now.tv_nsec);
+         if (expired) {
+             timer->callback(timer);
+         }
+    }
+}
+
+static void anthywl_state_run(struct anthywl_state *state) {
+    state->running = true;
     signal(SIGINT, sigint);
-    while (state.running && !interrupted) {
-        int timeout = INT_MAX;
-
-        if (!wl_list_empty(&state.timers)) {
-            struct timespec now;
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            struct anthywl_timer *timer;
-            wl_list_for_each(timer, &state.timers, link) {
-                int time =
-                    (timer->time.tv_sec - now.tv_sec) * 1000 +
-                    (timer->time.tv_nsec - now.tv_nsec) / 1000000;
-                if (time < timeout)
-                    timeout = time;
-            }
-        }
-
-        if (timeout == INT_MAX) timeout = -1;
-
+    while (state->running && !interrupted) {
         struct pollfd pfd = {
-            .fd = wl_display_get_fd(state.wl_display),
+            .fd = wl_display_get_fd(state->wl_display),
             .events = POLLIN,
         };
 
-        int res = poll(&pfd, 1, timeout);
-        if (res == -1) {
+        if (poll(&pfd, 1, anthywl_state_next_timer(state)) == -1) {
             if (errno == EINTR)
                 continue;
             perror("poll");
-            goto end;
+            break;
         }
 
-        while (wl_display_prepare_read(state.wl_display) != 0)
-            wl_display_dispatch_pending(state.wl_display);
+        while (wl_display_prepare_read(state->wl_display) != 0)
+            wl_display_dispatch_pending(state->wl_display);
 
         if (pfd.events & POLLIN)
-            wl_display_read_events(state.wl_display);
+            wl_display_read_events(state->wl_display);
         else
-            wl_display_cancel_read(state.wl_display);
+            wl_display_cancel_read(state->wl_display);
 
-
-        if (wl_display_dispatch_pending(state.wl_display) == -1) {
+        if (wl_display_dispatch_pending(state->wl_display) == -1) {
             perror("wl_display_dispatch");
-            goto end;
+            break;
         }
 
-        if (!wl_list_empty(&state.timers)) {
-            struct timespec now;
-            clock_gettime(CLOCK_MONOTONIC, &now);
-            struct anthywl_timer *timer, *tmp;
-            wl_list_for_each_safe(timer, tmp, &state.timers, link) {
-                bool expired = timer->time.tv_sec < now.tv_sec ||
-                    (timer->time.tv_sec == now.tv_sec &&
-                     timer->time.tv_nsec < now.tv_nsec);
-                 if (expired) {
-                     timer->callback(timer);
-                 }
-            }
-        }
+        anthywl_state_run_timers(state);
 
-        wl_display_flush(state.wl_display);
+        wl_display_flush(state->wl_display);
 
-        if (wl_list_empty(&state.seats)) {
-            fprintf(stderr, "No seats with input method unavailable.\n");
+        if (wl_list_empty(&state->seats)) {
+            fprintf(stderr, "No seats with input-method available.\n");
             break;
         }
     }
-    state.running = false;
+    signal(SIGINT, SIG_DFL);
+    state->running = false;
+}
 
-    struct anthywl_seat *tmp;
-    wl_list_for_each_safe(seat, tmp, &state.seats, link)
+static void anthywl_state_finish(struct anthywl_state *state) {
+    struct anthywl_seat *seat, *tmp;
+    wl_list_for_each_safe(seat, tmp, &state->seats, link)
         anthywl_seat_destroy(seat);
+    wl_display_disconnect(state->wl_display);
+}
 
-    wl_display_disconnect(state.wl_display);
-
-    rc = 0;
-end:
-    return rc;
+int main(void) {
+    if (anthy_init() != 0) {
+        perror("anthy_init");
+        return 1;
+    }
+    atexit(anthy_quit);
+    struct anthywl_state state = {0};
+    if (!anthywl_state_init(&state))
+        return 1;
+    anthywl_state_run(&state);
+    anthywl_state_finish(&state);
 }
