@@ -1,11 +1,14 @@
 #include <assert.h>
+#include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <sys/mman.h>
+#include <poll.h>
 #include <unistd.h>
 
 #include <anthy/anthy.h>
@@ -28,6 +31,13 @@ struct anthywl_state {
     struct zwp_virtual_keyboard_manager_v1 *zwp_virtual_keyboard_manager_v1;
     struct wl_list seats;
     struct wl_list buffers;
+    struct wl_list timers;
+};
+
+struct anthywl_timer {
+    struct wl_list link;
+    struct timespec time;
+    void (*callback)(struct anthywl_timer *timer);
 };
 
 struct anthywl_buffer {
@@ -79,6 +89,8 @@ struct anthywl_seat {
     uint32_t repeat_rate;
     uint32_t repeat_delay;
     xkb_keycode_t pressed[64];
+    xkb_keycode_t repeating_keycode;
+    struct anthywl_timer repeat_timer;
 
     // composing
     bool is_composing;
@@ -665,37 +677,6 @@ static void anthywl_seat_destroy(struct anthywl_seat *seat) {
     free(seat);
 }
 
-static bool anthywl_seat_update_key(
-    struct anthywl_seat *seat, xkb_keycode_t keycode,
-    enum wl_keyboard_key_state state, bool handled_before)
-{
-    switch (state) {
-    case WL_KEYBOARD_KEY_STATE_PRESSED:
-        if (handled_before) {
-            for (size_t i = 0;
-                i < sizeof(seat->pressed) / sizeof(seat->pressed[0]); i++)
-            {
-                if (seat->pressed[i] == 0) {
-                    seat->pressed[i] = keycode;
-                    return false;
-                }
-            }
-        }
-        return false;
-    case WL_KEYBOARD_KEY_STATE_RELEASED:
-        for (size_t i = 0;
-            i < sizeof(seat->pressed) / sizeof(seat->pressed[0]); i++)
-        {
-            if (seat->pressed[i] == keycode) {
-                seat->pressed[i] = 0;
-                return true;
-            }
-        }
-        return false;
-    }
-    assert(false);
-}
-
 static void anthywl_seat_composing_update(struct anthywl_seat *seat) {
     zwp_input_method_v2_set_preedit_string(
         seat->zwp_input_method_v2, seat->buffer.text,
@@ -962,6 +943,29 @@ static bool anthywl_seat_selecting_handle_key_event(
     }
 }
 
+static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
+    xkb_keycode_t keycode)
+{
+    xkb_keysym_t keysym = xkb_state_key_get_one_sym(seat->xkb_state, keycode);
+    if (seat->is_selecting) {
+        return anthywl_seat_selecting_handle_key_event(seat, keycode);
+    } else if (seat->is_composing) {
+        return anthywl_seat_composing_handle_key_event(seat, keycode);
+    } else if (keysym == XKB_KEY_Super_R) {
+        seat->is_composing = true;
+        return true;
+    }
+    return false;
+}
+
+static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
+    struct anthywl_seat *seat = wl_container_of(timer, seat, repeat_timer);
+    clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
+    seat->repeat_timer.time.tv_nsec += 1000000000 / seat->repeat_rate;
+    seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
+    anthywl_seat_handle_key(seat, seat->repeating_keycode);
+}
+
 static void zwp_input_method_keyboard_grab_v2_keymap(void *data,
     struct zwp_input_method_keyboard_grab_v2 *zwp_input_method_keyboard_grab_v2,
     uint32_t format, int32_t fd, uint32_t size)
@@ -986,33 +990,82 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
     uint32_t serial, uint32_t time, uint32_t key, uint32_t state)
 {
     struct anthywl_seat *seat = data;
-
     xkb_keycode_t keycode = key + 8;
     bool handled = false;
 
-    if (seat->active) {
-        if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-            xkb_keysym_t keysym =
-                xkb_state_key_get_one_sym(seat->xkb_state, keycode);
-            if (seat->is_selecting) {
-                handled |=
-                    anthywl_seat_selecting_handle_key_event(seat, keycode);
-            } else if (seat->is_composing) {
-                handled |=
-                    anthywl_seat_composing_handle_key_event(seat, keycode);
-            } else if (keysym == XKB_KEY_Super_R) {
-                seat->is_composing = true;
-                handled = true;
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED
+        && seat->repeating_keycode != 0
+        && seat->repeating_keycode != keycode)
+    {
+        if (!anthywl_seat_handle_key(seat, keycode)) {
+            seat->repeating_keycode = 0;
+            wl_list_remove(&seat->repeat_timer.link);
+            goto forward;
+        }
+        if (xkb_key_repeats(seat->xkb_keymap, keycode)) {
+            seat->repeating_keycode = keycode;
+            clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
+            seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
+            seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
+        } else {
+            seat->repeating_keycode = 0;
+        }
+        return;
+    }
+
+    if (state == WL_KEYBOARD_KEY_STATE_RELEASED
+        && seat->repeating_keycode == keycode)
+    {
+        seat->repeating_keycode = 0;
+        wl_list_remove(&seat->repeat_timer.link);
+        return;
+    }
+
+    if (seat->active && state == WL_KEYBOARD_KEY_STATE_PRESSED)
+        handled |= anthywl_seat_handle_key(seat, keycode);
+
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED
+        && xkb_key_repeats(seat->xkb_keymap, keycode)
+        && handled)
+    {
+        seat->repeating_keycode = keycode;
+        clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
+        seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
+        seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
+        wl_list_insert(&seat->state->timers, &seat->repeat_timer.link);
+        return;
+    }
+
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+        if (handled) {
+            for (size_t i = 0;
+                i < sizeof(seat->pressed) / sizeof(seat->pressed[0]); i++)
+            {
+                if (seat->pressed[i] == 0) {
+                    seat->pressed[i] = keycode;
+                    goto forward;
+                }
             }
         }
     }
 
-    handled |= anthywl_seat_update_key(seat, keycode, state, handled);
-
-    if (!handled) {
-        zwp_virtual_keyboard_v1_key(
-            seat->zwp_virtual_keyboard_v1, time, key, state);
+    if (state == WL_KEYBOARD_KEY_STATE_RELEASED) {
+        for (size_t i = 0;
+            i < sizeof(seat->pressed) / sizeof(seat->pressed[0]); i++)
+        {
+            if (seat->pressed[i] == keycode) {
+                seat->pressed[i] = 0;
+                return;
+            }
+        }
     }
+
+    if (handled)
+        return;
+
+forward:
+    zwp_virtual_keyboard_v1_key(
+        seat->zwp_virtual_keyboard_v1, time, key, state);
 }
 
 static void zwp_input_method_keyboard_grab_v2_modifiers(void *data,
@@ -1198,6 +1251,7 @@ int main() {
     struct anthywl_state state = { 0 };
     wl_list_init(&state.seats);
     wl_list_init(&state.buffers);
+    wl_list_init(&state.timers);
  
     state.wl_display = wl_display_connect(NULL);
     if (state.wl_display == NULL) {
@@ -1233,13 +1287,70 @@ int main() {
     wl_list_for_each(seat, &state.seats, link)
         anthywl_seat_init_protocols(seat);
 
+    wl_display_flush(state.wl_display);
+
     state.running = true;
     signal(SIGINT, sigint);
     while (state.running && !interrupted) {
-        if (wl_display_dispatch(state.wl_display) == -1) {
+        int timeout = INT_MAX;
+
+        if (!wl_list_empty(&state.timers)) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            struct anthywl_timer *timer;
+            wl_list_for_each(timer, &state.timers, link) {
+                int time =
+                    (timer->time.tv_sec - now.tv_sec) * 1000 +
+                    (timer->time.tv_nsec - now.tv_nsec) / 1000000;
+                if (time < timeout)
+                    timeout = time;
+            }
+        }
+
+        if (timeout == INT_MAX) timeout = -1;
+
+        struct pollfd pfd = {
+            .fd = wl_display_get_fd(state.wl_display),
+            .events = POLLIN,
+        };
+
+        int res = poll(&pfd, 1, timeout);
+        if (res == -1) {
+            if (errno == EINTR)
+                continue;
+            perror("poll");
+            goto end;
+        }
+
+        while (wl_display_prepare_read(state.wl_display) != 0)
+            wl_display_dispatch_pending(state.wl_display);
+
+        if (pfd.events & POLLIN)
+            wl_display_read_events(state.wl_display);
+        else
+            wl_display_cancel_read(state.wl_display);
+
+
+        if (wl_display_dispatch_pending(state.wl_display) == -1) {
             perror("wl_display_dispatch");
             goto end;
         }
+
+        if (!wl_list_empty(&state.timers)) {
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            struct anthywl_timer *timer, *tmp;
+            wl_list_for_each_safe(timer, tmp, &state.timers, link) {
+                bool expired = timer->time.tv_sec < now.tv_sec ||
+                    (timer->time.tv_sec == now.tv_sec &&
+                     timer->time.tv_nsec < now.tv_nsec);
+                 if (expired) {
+                     timer->callback(timer);
+                 }
+            }
+        }
+
+        wl_display_flush(state.wl_display);
 
         if (wl_list_empty(&state.seats)) {
             fprintf(stderr, "No seats with input method unavailable.\n");
