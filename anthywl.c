@@ -624,6 +624,7 @@ static void anthywl_seat_init(struct anthywl_seat *seat,
     seat->anthy_context = anthy_create_context();
     anthy_context_set_encoding(seat->anthy_context, ANTHY_UTF8_ENCODING);
     seat->is_composing = true;
+    seat->show_preedit = true;
 }
 
 static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener;
