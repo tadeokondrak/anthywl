@@ -32,6 +32,7 @@ anthywl_bin = executable(
     'anthywl',
     'anthywl.c',
     'buffer.c',
+    'graphics_buffer.c',
     dependencies: [
         wayland_client_dep,
         xkbcommon_dep,

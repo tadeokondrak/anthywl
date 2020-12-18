@@ -20,7 +20,9 @@
 
 #include "input-method-unstable-v2-client-protocol.h"
 #include "virtual-keyboard-unstable-v1-client-protocol.h"
+
 #include "buffer.h"
+#include "graphics_buffer.h"
 
 struct anthywl_state {
     bool running;
@@ -39,18 +41,6 @@ struct anthywl_timer {
     struct wl_list link;
     struct timespec time;
     void (*callback)(struct anthywl_timer *timer);
-};
-
-struct anthywl_graphics_buffer {
-    struct wl_list link;
-    struct anthywl_state *state;
-    struct wl_buffer *wl_buffer;
-    int width, height, stride;
-    unsigned char *data;
-    size_t size;
-    bool in_use;
-    cairo_t *cairo;
-    cairo_surface_t *cairo_surface;
 };
 
 struct anthywl_seat {
@@ -103,89 +93,6 @@ struct anthywl_seat {
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2;
     bool show_preedit;
 };
-
-static void wl_buffer_release(void *data, struct wl_buffer *wl_buffer) {
-    struct anthywl_graphics_buffer *buffer = data;
-    buffer->in_use = false;
-}
-
-static struct wl_buffer_listener const wl_buffer_listener = {
-    .release = wl_buffer_release,
-};
-
-static struct anthywl_graphics_buffer *anthywl_graphics_buffer_create(
-    struct anthywl_state *state, int width, int height)
-{
-    struct anthywl_graphics_buffer *buffer = calloc(1, sizeof(*buffer));
-
-    buffer->width = width;
-    buffer->height = height;
-    buffer->stride =
-        cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, buffer->width);
-    buffer->size = buffer->width * buffer->stride * buffer->height;
-    buffer->in_use = true;
-    int fd = memfd_create("anthywl", MFD_CLOEXEC);
-    int rc = ftruncate(fd, buffer->size); (void)rc;
-    
-    buffer->data =
-        mmap(NULL, buffer->size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-
-    struct wl_shm_pool *pool =
-        wl_shm_create_pool(state->wl_shm, fd, buffer->size);
-
-    buffer->wl_buffer = wl_shm_pool_create_buffer(
-        pool, 0, buffer->width, buffer->height,
-        buffer->stride, WL_SHM_FORMAT_ARGB8888);
-
-    close(fd);
-    wl_shm_pool_destroy(pool);
-
-    wl_buffer_add_listener(buffer->wl_buffer, &wl_buffer_listener, buffer);
-    wl_list_insert(&state->buffers, &buffer->link);
-
-    buffer->cairo_surface = cairo_image_surface_create_for_data(
-        buffer->data, CAIRO_FORMAT_ARGB32,
-        buffer->width, buffer->height, buffer->stride);
-    buffer->cairo = cairo_create(buffer->cairo_surface);
-
-    return buffer;
-}
-
-static void anthywl_graphics_buffer_destroy(
-    struct anthywl_graphics_buffer *buffer)
-{
-    cairo_destroy(buffer->cairo);
-    cairo_surface_destroy(buffer->cairo_surface);
-    munmap(buffer->data, buffer->size);
-    wl_buffer_destroy(buffer->wl_buffer);
-    wl_list_remove(&buffer->link);
-    free(buffer);
-}
-
-static struct anthywl_graphics_buffer *anthywl_get_graphics_buffer(
-    struct anthywl_state *state, int width, int height)
-{
-    bool found = false;
-
-    struct anthywl_graphics_buffer *buffer, *tmp;
-    wl_list_for_each_safe (buffer, tmp, &state->buffers, link) {
-        if (buffer->in_use)
-            continue;
-        if (buffer->width != width || buffer->height != height) {
-            anthywl_graphics_buffer_destroy(buffer);
-            continue;
-        }
-        found = true;
-        break;
-    }
-
-    if (!found)
-        buffer = anthywl_graphics_buffer_create(state, width, height);
-
-    buffer->in_use = true;
-
-    return buffer;
-}
 
 static void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
@@ -245,8 +152,9 @@ static struct anthywl_graphics_buffer *anthywl_seat_composing_draw_popup(
     cairo_recording_surface_ink_extents(recording_cairo_surface,
         &surface_x, &surface_y, &surface_width, &surface_height);
 
-    struct anthywl_graphics_buffer *buffer =
-        anthywl_get_graphics_buffer(seat->state, surface_width, surface_height);
+    struct anthywl_graphics_buffer *buffer = anthywl_graphics_buffer_get(
+        seat->state->wl_shm, &seat->state->buffers,
+        surface_width, surface_height);
     cairo_set_source_rgba(buffer->cairo, 0.0, 0.0, 0.0, 1.0);
     cairo_paint(buffer->cairo);
     cairo_set_source_surface(buffer->cairo, recording_cairo_surface, 0.0, 0.0);
@@ -357,8 +265,9 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
     cairo_recording_surface_ink_extents(recording_cairo_surface,
         &surface_x, &surface_y, &surface_width, &surface_height);
 
-    struct anthywl_graphics_buffer *buffer =
-        anthywl_get_graphics_buffer(seat->state, surface_width, surface_height);
+    struct anthywl_graphics_buffer *buffer = anthywl_graphics_buffer_get(
+        seat->state->wl_shm, &seat->state->buffers,
+        surface_width, surface_height);
     cairo_set_source_rgba(buffer->cairo, 0.0, 0.0, 0.0, 1.0);
     cairo_paint(buffer->cairo);
     cairo_set_source_surface(buffer->cairo, recording_cairo_surface, 0.0, 0.0);
