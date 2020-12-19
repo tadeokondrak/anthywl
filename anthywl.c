@@ -33,8 +33,8 @@ struct anthywl_state {
     struct wl_shm *wl_shm;
     struct zwp_input_method_manager_v2 *zwp_input_method_manager_v2;
     struct zwp_virtual_keyboard_manager_v1 *zwp_virtual_keyboard_manager_v1;
-    struct wl_list seats;
     struct wl_list buffers;
+    struct wl_list seats;
     struct wl_list timers;
 };
 
@@ -926,8 +926,8 @@ static struct wl_registry_listener const wl_registry_listener = {
 };
 
 static bool anthywl_state_init(struct anthywl_state *state) {
-    wl_list_init(&state->seats);
     wl_list_init(&state->buffers);
+    wl_list_init(&state->seats);
     wl_list_init(&state->timers);
  
     state->wl_display = wl_display_connect(NULL);
@@ -1048,10 +1048,29 @@ static void anthywl_state_run(struct anthywl_state *state) {
 }
 
 static void anthywl_state_finish(struct anthywl_state *state) {
-    struct anthywl_seat *seat, *tmp;
-    wl_list_for_each_safe(seat, tmp, &state->seats, link)
+    struct anthywl_seat *seat, *tmp_seat;
+    wl_list_for_each_safe(seat, tmp_seat, &state->seats, link)
         anthywl_seat_destroy(seat);
-    wl_display_disconnect(state->wl_display);
+    struct anthywl_graphics_buffer *graphics_buffer, *tmp_graphics_buffer;
+    wl_list_for_each_safe(
+        graphics_buffer, tmp_graphics_buffer, &state->buffers, link)
+    {
+        anthywl_graphics_buffer_destroy(graphics_buffer);
+    }
+    if (state->zwp_virtual_keyboard_manager_v1 != NULL) {
+        zwp_virtual_keyboard_manager_v1_destroy(
+            state->zwp_virtual_keyboard_manager_v1);
+    }
+    if (state->zwp_input_method_manager_v2 != NULL)
+        zwp_input_method_manager_v2_destroy(state->zwp_input_method_manager_v2);
+    if (state->wl_shm != NULL)
+        wl_shm_destroy(state->wl_shm);
+    if (state->wl_compositor != NULL)
+        wl_compositor_destroy(state->wl_compositor);
+    if (state->wl_registry != NULL)
+        wl_registry_destroy(state->wl_registry);
+    if (state->wl_display != NULL)
+        wl_display_disconnect(state->wl_display);
 }
 
 int main(void) {
