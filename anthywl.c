@@ -889,50 +889,91 @@ static struct wl_seat_listener const wl_seat_listener = {
     .name = wl_seat_name,
 };
 
-static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener =
-{
-    .activate = zwp_input_method_v2_activate,
-    .deactivate = zwp_input_method_v2_deactivate,
-    .surrounding_text = zwp_input_method_v2_surrounding_text,
-    .text_change_cause = zwp_input_method_v2_text_change_cause,
-    .content_type = zwp_input_method_v2_content_type,
-    .done = zwp_input_method_v2_done,
-    .unavailable = zwp_input_method_v2_unavailable,
+static void wl_seat_global(struct anthywl_state *state, void *data) {
+    struct wl_seat *wl_seat = data;
+    struct anthywl_seat *seat = calloc(1, sizeof *seat);
+    anthywl_seat_init(seat, state, wl_seat);
+    wl_list_insert(&state->seats, &seat->link);
+}
+
+struct anthywl_global {
+    char const *name;
+    struct wl_interface const *interface;
+    int version;
+    bool is_singleton;
+    union {
+        ptrdiff_t offset;
+        void (*callback)(struct anthywl_state *state, void *data);
+    };
+};
+
+static int anthywl_global_compare(const void *a, const void *b) {
+    return strcmp(
+        ((struct anthywl_global const *)a)->name,
+        ((struct anthywl_global const *)b)->name);
+}
+
+static struct anthywl_global const globals[] = {
+    {
+        .name = "wl_compositor",
+        .interface = &wl_compositor_interface,
+        .version = 4,
+        .is_singleton = true,
+        .offset = offsetof(struct anthywl_state, wl_compositor),
+    },
+    {
+        .name = "wl_seat",
+        .interface = &wl_seat_interface,
+        .version = 7,
+        .is_singleton = false,
+        .callback = wl_seat_global,
+    },
+    {
+        .name = "wl_shm",
+        .interface = &wl_shm_interface,
+        .version = 1,
+        .is_singleton = true,
+        .offset = offsetof(struct anthywl_state, wl_shm),
+    },
+    {
+        .name = "zwp_input_method_manager_v2",
+        .interface = &zwp_input_method_manager_v2_interface,
+        .version = 1,
+        .is_singleton = true,
+        .offset = offsetof(struct anthywl_state, zwp_input_method_manager_v2),
+    },
+    {
+        .name = "zwp_virtual_keyboard_manager_v1",
+        .interface = &zwp_virtual_keyboard_manager_v1_interface,
+        .version = 1,
+        .is_singleton = true,
+        .offset = offsetof(struct anthywl_state, zwp_virtual_keyboard_manager_v1),
+    },
 };
 
 static void wl_registry_global(void *data, struct wl_registry *wl_registry,
     uint32_t name, char const *interface, uint32_t version)
 {
-    struct anthywl_state *state = data;
-    if (strcmp(interface, wl_shm_interface.name) == 0) {
-        state->wl_shm = wl_registry_bind(
-            wl_registry, name, &wl_shm_interface, 1);
-    } else if (strcmp(interface, wl_compositor_interface.name) == 0) {
-        state->wl_compositor = wl_registry_bind(
-            wl_registry, name, &wl_compositor_interface, 4);
-    } else if (strcmp(interface, wl_seat_interface.name) == 0) {
-        struct anthywl_seat *seat = calloc(1, sizeof(*seat));
-        struct wl_seat *wl_seat = wl_registry_bind(
-            wl_registry, name, &wl_seat_interface, 4);
-        anthywl_seat_init(seat, state, wl_seat);
-        wl_list_insert(&state->seats, &seat->link);
-    } else if (strcmp(
-        interface, zwp_input_method_manager_v2_interface.name) == 0)
-    {
-        state->zwp_input_method_manager_v2 = wl_registry_bind(
-            wl_registry, name, &zwp_input_method_manager_v2_interface, 1);
-    } else if (strcmp(
-        interface, zwp_virtual_keyboard_manager_v1_interface.name) == 0)
-    {
-        state->zwp_virtual_keyboard_manager_v1 = wl_registry_bind(
-            wl_registry, name, &zwp_virtual_keyboard_manager_v1_interface, 1);
+    struct anthywl_global global = { .name = interface };
+    struct anthywl_global *found = bsearch(&global, globals,
+        sizeof globals / sizeof(struct anthywl_global),
+        sizeof(struct anthywl_global), anthywl_global_compare);
+
+    if (found == NULL)
+        return;
+
+    if (found->is_singleton) {
+        *(void **)((uintptr_t)data + found->offset) = wl_registry_bind(
+            wl_registry, name, found->interface, found->version);
+    } else {
+        found->callback(data, wl_registry_bind(
+            wl_registry, name, found->interface, found->version));
     }
 }
 
 static void wl_registry_global_remove(void *data,
     struct wl_registry *wl_registry, uint32_t name)
 {
-    // TODO: handle seat removal?
 }
 
 static struct wl_registry_listener const wl_registry_listener = {
@@ -955,24 +996,17 @@ static bool anthywl_state_init(struct anthywl_state *state) {
     wl_registry_add_listener(state->wl_registry, &wl_registry_listener, state);
     wl_display_roundtrip(state->wl_display);
 
-    if (state->wl_compositor == NULL) {
-        fprintf(stderr, "Missing protocol: wl_compositor\n");
-        return false;
-    }
-
-    if (state->wl_shm == NULL) {
-        fprintf(stderr, "Missing protocol: wl_shm\n");
-        return false;
-    }
-
-    if (state->zwp_input_method_manager_v2 == NULL) {
-        fprintf(stderr, "Missing protocol: zwp_input_method_manager_v2\n");
-        return false;
-    }
-
-    if (state->zwp_virtual_keyboard_manager_v1 == NULL) {
-        fprintf(stderr, "Missing protocol: zwp_virtual_keyboard_manager_v1\n");
-        return false;
+    for (size_t i = 0; i < sizeof globals / sizeof globals[0]; i++) {
+        const struct anthywl_global *global = &globals[i];
+        if (!global->is_singleton)
+            continue;
+        struct wl_proxy **location =
+            (struct wl_proxy **)((uintptr_t)state + global->offset);
+        if (*location == NULL) {
+            fprintf(stderr, "required interface unsupported by compositor: %s\n",
+                global->name);
+            return false;
+        }
     }
 
     struct anthywl_seat *seat;
