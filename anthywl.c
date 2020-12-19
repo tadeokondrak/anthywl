@@ -2,19 +2,20 @@
 #include <errno.h>
 #include <signal.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
-#include <sys/mman.h>
 #include <poll.h>
+#include <sys/mman.h>
 #include <unistd.h>
 
 #include <anthy/anthy.h>
 #include <cairo.h>
-#include <pango/pango.h>
 #include <pango/pangocairo.h>
+#include <pango/pango.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
