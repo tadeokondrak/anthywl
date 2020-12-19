@@ -695,7 +695,7 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
             wl_list_remove(&seat->repeat_timer.link);
             goto forward;
         }
-        if (xkb_key_repeats(seat->xkb_keymap, keycode)) {
+        if (xkb_keymap_key_repeats(seat->xkb_keymap, keycode)) {
             seat->repeating_keycode = keycode;
             clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
             seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
