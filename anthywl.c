@@ -451,6 +451,10 @@ static bool anthywl_seat_composing_handle_key_event(
         return true;
     }
 
+    uint32_t codepoint = xkb_state_key_get_utf32(seat->xkb_state, keycode);
+    if (codepoint != 0 && codepoint < 32)
+        return false;
+
     int utf8_len = xkb_state_key_get_utf8(seat->xkb_state, keycode, NULL, 0);
     if (utf8_len == 0)
         return false;
