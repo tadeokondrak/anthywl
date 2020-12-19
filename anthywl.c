@@ -729,22 +729,20 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
         return;
     }
 
-    if (state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-        if (handled) {
-            for (size_t i = 0;
-                i < sizeof(seat->pressed) / sizeof(seat->pressed[0]); i++)
-            {
-                if (seat->pressed[i] == 0) {
-                    seat->pressed[i] = keycode;
-                    goto forward;
-                }
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED && handled) {
+        for (size_t i = 0;
+            i < sizeof seat->pressed / sizeof seat->pressed[0]; i++)
+        {
+            if (seat->pressed[i] == 0) {
+                seat->pressed[i] = keycode;
+                goto forward;
             }
         }
     }
 
     if (state == WL_KEYBOARD_KEY_STATE_RELEASED) {
         for (size_t i = 0;
-            i < sizeof(seat->pressed) / sizeof(seat->pressed[0]); i++)
+            i < sizeof seat->pressed / sizeof seat->pressed[0]; i++)
         {
             if (seat->pressed[i] == keycode) {
                 seat->pressed[i] = 0;
@@ -763,8 +761,9 @@ forward:
 
 static void zwp_input_method_keyboard_grab_v2_modifiers(void *data,
     struct zwp_input_method_keyboard_grab_v2 *zwp_input_method_keyboard_grab_v2,
-    uint32_t serial, uint32_t mods_depressed, uint32_t mods_latched,
-    uint32_t mods_locked, uint32_t group)
+    uint32_t serial,
+    uint32_t mods_depressed, uint32_t mods_latched, uint32_t mods_locked,
+    uint32_t group)
 {
     struct anthywl_seat *seat = data;
     xkb_state_update_mask(seat->xkb_state,
@@ -791,23 +790,23 @@ static struct zwp_input_method_keyboard_grab_v2_listener const
     .repeat_info = zwp_input_method_keyboard_grab_v2_repeat_info,
 };
 
-static void zwp_input_method_v2_activate(void *data,
-    struct zwp_input_method_v2 *zwp_input_method_v2)
+static void zwp_input_method_v2_activate(
+    void *data, struct zwp_input_method_v2 *zwp_input_method_v2)
 {
     struct anthywl_seat *seat = data;
     seat->pending_activate = true;
 }
 
-static void zwp_input_method_v2_deactivate(void *data,
-    struct zwp_input_method_v2 *zwp_input_method_v2)
+static void zwp_input_method_v2_deactivate(
+    void *data, struct zwp_input_method_v2 *zwp_input_method_v2)
 {
     struct anthywl_seat *seat = data;
     seat->pending_activate = false;
 }
 
-static void zwp_input_method_v2_surrounding_text(void *data,
-    struct zwp_input_method_v2 *zwp_input_method_v2, char const *text,
-    uint32_t cursor, uint32_t anchor)
+static void zwp_input_method_v2_surrounding_text(
+    void *data, struct zwp_input_method_v2 *zwp_input_method_v2,
+    char const *text, uint32_t cursor, uint32_t anchor)
 {
     struct anthywl_seat *seat = data;
     free(seat->pending_surrounding_text);
@@ -816,24 +815,25 @@ static void zwp_input_method_v2_surrounding_text(void *data,
     seat->pending_surrounding_text_anchor = anchor;
 }
 
-static void zwp_input_method_v2_text_change_cause(void *data,
-    struct zwp_input_method_v2 *zwp_input_method_v2, uint32_t cause)
+static void zwp_input_method_v2_text_change_cause(
+    void *data, struct zwp_input_method_v2 *zwp_input_method_v2,
+    uint32_t cause)
 {
     struct anthywl_seat *seat = data;
     seat->pending_text_change_cause = cause;
 }
 
-static void zwp_input_method_v2_content_type(void *data,
-    struct zwp_input_method_v2 *zwp_input_method_v2, uint32_t hint,
-    uint32_t purpose)
+static void zwp_input_method_v2_content_type(
+    void *data, struct zwp_input_method_v2 *zwp_input_method_v2,
+    uint32_t hint, uint32_t purpose)
 {
     struct anthywl_seat *seat = data;
     seat->pending_content_type_hint = hint;
     seat->pending_content_type_purpose = purpose;
 }
 
-static void zwp_input_method_v2_done(void *data,
-    struct zwp_input_method_v2 *zwp_input_method_v2)
+static void zwp_input_method_v2_done(
+    void *data, struct zwp_input_method_v2 *zwp_input_method_v2)
 {
     struct anthywl_seat *seat = data;
     bool was_active = seat->active;
@@ -854,13 +854,24 @@ static void zwp_input_method_v2_done(void *data,
     }
 }
 
-static void zwp_input_method_v2_unavailable(void *data,
-    struct zwp_input_method_v2 *zwp_input_method_v2)
+static void zwp_input_method_v2_unavailable(
+    void *data, struct zwp_input_method_v2 *zwp_input_method_v2)
 {
     struct anthywl_seat *seat = data;
     fprintf(stderr, "Input method unavailable on seat \"%s\".\n", seat->name);
     anthywl_seat_destroy(seat);
 }
+
+static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener =
+{
+    .activate = zwp_input_method_v2_activate,
+    .deactivate = zwp_input_method_v2_deactivate,
+    .surrounding_text = zwp_input_method_v2_surrounding_text,
+    .text_change_cause = zwp_input_method_v2_text_change_cause,
+    .content_type = zwp_input_method_v2_content_type,
+    .done = zwp_input_method_v2_done,
+    .unavailable = zwp_input_method_v2_unavailable,
+};
 
 void wl_seat_capabilities(void *data, struct wl_seat *wl_seat,
     uint32_t capabilities)
@@ -1003,9 +1014,8 @@ static void anthywl_state_run_timers(struct anthywl_state *state) {
         bool expired = timer->time.tv_sec < now.tv_sec ||
             (timer->time.tv_sec == now.tv_sec &&
              timer->time.tv_nsec < now.tv_nsec);
-         if (expired) {
+         if (expired)
              timer->callback(timer);
-         }
     }
 }
 
