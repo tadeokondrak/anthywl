@@ -14,8 +14,8 @@
 
 #include <anthy/anthy.h>
 #include <cairo.h>
-#include <pango/pangocairo.h>
 #include <pango/pango.h>
+#include <pango/pangocairo.h>
 #include <wayland-client.h>
 #include <xkbcommon/xkbcommon.h>
 
