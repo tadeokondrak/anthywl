@@ -88,7 +88,7 @@ struct anthywl_seat {
     int current_segment;
     int segment_count;
     int *selected_candidates;
-    struct anthy_context *anthy_context;
+    anthy_context_t anthy_context;
 
     // popup
     struct wl_surface *wl_surface;
@@ -634,6 +634,7 @@ static bool anthywl_seat_selecting_handle_key_event(
         return true;
     default:
         anthywl_seat_selecting_commit(seat);
+        // FIXME: this key should be handled by the IME again after this
         return false;
     }
 }
@@ -642,14 +643,12 @@ static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
     xkb_keycode_t keycode)
 {
     xkb_keysym_t keysym = xkb_state_key_get_one_sym(seat->xkb_state, keycode);
-    if (seat->is_selecting) {
+    if (seat->is_selecting)
         return anthywl_seat_selecting_handle_key_event(seat, keycode);
-    } else if (seat->is_composing) {
+    if (seat->is_composing)
         return anthywl_seat_composing_handle_key_event(seat, keycode);
-    } else if (keysym == XKB_KEY_Super_R) {
+    if (keysym == XKB_KEY_Super_R)
         seat->is_composing = true;
-        return true;
-    }
     return false;
 }
 
@@ -1009,7 +1008,8 @@ static bool anthywl_state_init(struct anthywl_state *state) {
         struct wl_proxy **location =
             (struct wl_proxy **)((uintptr_t)state + global->offset);
         if (*location == NULL) {
-            fprintf(stderr, "required interface unsupported by compositor: %s\n",
+            fprintf(
+                stderr, "required interface unsupported by compositor: %s\n",
                 global->name);
             return false;
         }

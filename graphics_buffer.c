@@ -16,7 +16,7 @@ static struct wl_buffer_listener const wl_buffer_listener = {
 static struct anthywl_graphics_buffer *anthywl_graphics_buffer_create(
     struct wl_shm *wl_shm, struct wl_list *buffers, int width, int height)
 {
-    struct anthywl_graphics_buffer *buffer = calloc(1, sizeof(*buffer));
+    struct anthywl_graphics_buffer *buffer = calloc(1, sizeof *buffer);
 
     buffer->width = width;
     buffer->height = height;
