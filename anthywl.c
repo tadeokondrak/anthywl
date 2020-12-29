@@ -54,6 +54,7 @@ struct anthywl_seat {
     struct zwp_input_method_keyboard_grab_v2 *zwp_input_method_keyboard_grab_v2;
     struct zwp_virtual_keyboard_v1 *zwp_virtual_keyboard_v1;
 
+    char *xkb_keymap_string;
     struct xkb_context *xkb_context;
     struct xkb_keymap *xkb_keymap;
     struct xkb_state *xkb_state;
@@ -352,6 +353,7 @@ static void anthywl_seat_destroy(struct anthywl_seat *seat) {
     xkb_state_unref(seat->xkb_state);
     xkb_keymap_unref(seat->xkb_keymap);
     xkb_context_unref(seat->xkb_context);
+    free(seat->xkb_keymap_string);
     if (seat->are_protocols_initted) {
         zwp_input_popup_surface_v2_destroy(seat->zwp_input_popup_surface_v2);
         wl_surface_destroy(seat->wl_surface);
@@ -664,16 +666,20 @@ static void zwp_input_method_keyboard_grab_v2_keymap(void *data,
     uint32_t format, int32_t fd, uint32_t size)
 {
     struct anthywl_seat *seat = data;
-    zwp_virtual_keyboard_v1_keymap(
-        seat->zwp_virtual_keyboard_v1, format, fd, size);
-
     char *map = mmap(NULL, size, PROT_READ, MAP_PRIVATE, fd, 0);
-    xkb_keymap_unref(seat->xkb_keymap);
-    xkb_state_unref(seat->xkb_state);
-    seat->xkb_keymap = xkb_keymap_new_from_string(seat->xkb_context, map,
-        XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
-    seat->xkb_state = xkb_state_new(seat->xkb_keymap);
-
+    if (seat->xkb_keymap_string == NULL
+        || strcmp(seat->xkb_keymap_string, map) != 0)
+    {
+        zwp_virtual_keyboard_v1_keymap(
+            seat->zwp_virtual_keyboard_v1, format, fd, size);
+        xkb_keymap_unref(seat->xkb_keymap);
+        xkb_state_unref(seat->xkb_state);
+        seat->xkb_keymap = xkb_keymap_new_from_string(seat->xkb_context, map,
+            XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        seat->xkb_state = xkb_state_new(seat->xkb_keymap);
+        free(seat->xkb_keymap_string);
+        seat->xkb_keymap_string = strdup(map);
+    }
     close(fd);
     munmap(map, size);
 }
