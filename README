@@ -1,0 +1,24 @@
+anthywl
+Work-in-progress Japanese input method for sway
+
+Required patches:
+https://github.com/swaywm/wlroots/pull/2550 
+https://github.com/swaywm/sway/pull/5890
+
+Currently hard-coded key bindings:
+
+Composing:
+Menu: Toggle preedit over-the-spot popup
+Space: Enter selection mode
+Escape: Clear preedit
+Return: Commit preedit
+
+Selection:
+Any: Commit selection
+Up: Previous candidate
+Down: Next candidate
+Left: Previous segment
+Right: Next segment
+Shift-Left: Shrink segment
+Shift-Right: Enlarge segment
+Return: Commit selection
