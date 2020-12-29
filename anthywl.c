@@ -117,33 +117,33 @@ static struct anthywl_graphics_buffer *anthywl_seat_composing_draw_popup(
     cairo_surface_t *recording_cairo_surface =
         cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, NULL);
     cairo_t *recording_cairo = cairo_create(recording_cairo_surface);
-
     PangoLayout *layout = pango_cairo_create_layout(recording_cairo);
 
-    double x = BORDER + PADDING, y = BORDER + PADDING, max_x = 0;
+    double x = BORDER + PADDING, y = BORDER + PADDING;
+    double max_text_width = 0.0;
     cairo_move_to(recording_cairo, x, y);
 
-    {
-        pango_layout_set_text(layout, seat->buffer.text, -1);
-        PangoRectangle rect;
-        pango_layout_get_extents(layout, NULL, &rect);
-        max_x = (double)rect.width / PANGO_SCALE > max_x
-            ? (double)rect.width / PANGO_SCALE
-            : max_x;
-        y += (double)rect.height / PANGO_SCALE;
-        cairo_set_source_rgba(recording_cairo, 1.0, 1.0, 1.0, 1.0);
-        pango_cairo_update_layout(recording_cairo, layout);
-        pango_cairo_show_layout(recording_cairo, layout);
-        cairo_move_to(recording_cairo, x, y);
+    pango_layout_set_text(layout, seat->buffer.text, -1);
+    PangoRectangle rect;
+    pango_layout_get_extents(layout, NULL, &rect);
+    double text_width = (double)rect.width / PANGO_SCALE;
+    double text_height = (double)rect.height / PANGO_SCALE;
+    if (text_width > max_text_width) {
+        max_text_width = text_width;
     }
+    y += text_height;
+    cairo_set_source_rgba(recording_cairo, 1.0, 1.0, 1.0, 1.0);
+    pango_cairo_update_layout(recording_cairo, layout);
+    pango_cairo_show_layout(recording_cairo, layout);
+    cairo_move_to(recording_cairo, x, y);
 
-    max_x += BORDER * 2.0 + PADDING * 2.0;
+    x = max_text_width + BORDER * 2.0 + PADDING * 2.0;
     y += BORDER + PADDING;
 
     double half_border = BORDER / 2.0;
     cairo_move_to(recording_cairo, half_border, half_border);
-    cairo_line_to(recording_cairo, max_x - half_border, half_border);
-    cairo_line_to(recording_cairo, max_x - half_border, y - half_border);
+    cairo_line_to(recording_cairo, x - half_border, half_border);
+    cairo_line_to(recording_cairo, x - half_border, y - half_border);
     cairo_line_to(recording_cairo, half_border, y - half_border);
     cairo_line_to(recording_cairo, half_border, half_border);
     cairo_set_line_width(recording_cairo, BORDER);
@@ -171,7 +171,6 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
     cairo_surface_t *recording_cairo_surface =
         cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, NULL);
     cairo_t *recording_cairo = cairo_create(recording_cairo_surface);
-
     PangoLayout *layout = pango_cairo_create_layout(recording_cairo);
 
     double x = BORDER + PADDING, y = BORDER + PADDING;
