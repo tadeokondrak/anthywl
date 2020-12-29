@@ -653,10 +653,14 @@ static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
 
 static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
     struct anthywl_seat *seat = wl_container_of(timer, seat, repeat_timer);
-    clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
-    seat->repeat_timer.time.tv_nsec += 1000000000 / seat->repeat_rate;
-    seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
-    anthywl_seat_handle_key(seat, seat->repeating_keycode);
+    if (!anthywl_seat_handle_key(seat, seat->repeating_keycode)) {
+        wl_list_remove(&timer->link);
+        seat->repeating_keycode = 0;
+    } else {
+        clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
+        timer->time.tv_nsec += 1000000000 / seat->repeat_rate;
+        timer->callback = anthywl_seat_repeat_timer_callback;
+    }
 }
 
 static void zwp_input_method_keyboard_grab_v2_keymap(void *data,
