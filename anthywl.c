@@ -651,6 +651,13 @@ static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
     return false;
 }
 
+static void timespec_correct(struct timespec *ts) {
+    if (ts->tv_nsec >= 1000000000) {
+        ts->tv_sec += 1;
+        ts->tv_nsec -= 1000000000;
+    }
+}
+
 static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
     struct anthywl_seat *seat = wl_container_of(timer, seat, repeat_timer);
     if (!anthywl_seat_handle_key(seat, seat->repeating_keycode)) {
@@ -659,6 +666,7 @@ static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
     } else {
         clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
         timer->time.tv_nsec += 1000000000 / seat->repeat_rate;
+        timespec_correct(&timer->time);
         timer->callback = anthywl_seat_repeat_timer_callback;
     }
 }
@@ -707,6 +715,7 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
             seat->repeating_keycode = keycode;
             clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
             seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
+            timespec_correct(&seat->repeat_timer.time);
             seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
         } else {
             seat->repeating_keycode = 0;
@@ -732,6 +741,7 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
         seat->repeating_keycode = keycode;
         clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
         seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
+        timespec_correct(&seat->repeat_timer.time);
         seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
         wl_list_insert(&seat->state->timers, &seat->repeat_timer.link);
         return;
