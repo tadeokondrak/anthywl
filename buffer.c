@@ -462,3 +462,12 @@ void anthywl_buffer_convert_romaji(struct anthywl_buffer *buffer) {
         return;
     }
 }
+
+void anthywl_buffer_convert_trailing_n(struct anthywl_buffer *buffer) {
+    if (buffer->pos == 0)
+        return;
+    if (buffer->text[buffer->pos - 1] == 'n') {
+        anthywl_buffer_delete_backwards(buffer, 1);
+        anthywl_buffer_append(buffer, "ん");
+    }
+}

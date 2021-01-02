@@ -17,3 +17,4 @@ void anthywl_buffer_delete_forwards(struct anthywl_buffer *, size_t);
 void anthywl_buffer_move_left(struct anthywl_buffer *);
 void anthywl_buffer_move_right(struct anthywl_buffer *);
 void anthywl_buffer_convert_romaji(struct anthywl_buffer *);
+void anthywl_buffer_convert_trailing_n(struct anthywl_buffer *);

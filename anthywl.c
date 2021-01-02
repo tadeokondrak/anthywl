@@ -435,6 +435,7 @@ static bool anthywl_seat_composing_handle_key_event(
     case XKB_KEY_space:
         if (seat->buffer.len == 0)
             return false;
+        anthywl_buffer_convert_trailing_n(&seat->buffer);
         seat->is_selecting = true;
         seat->is_initial_selection = true;
         anthy_reset_context(seat->anthy_context);
