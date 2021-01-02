@@ -85,6 +85,7 @@ struct anthywl_seat {
 
     // selecting 
     bool is_selecting;
+    bool is_initial_selection;
     int current_segment;
     int segment_count;
     int *selected_candidates;
@@ -278,7 +279,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
 static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
     struct anthywl_graphics_buffer *buffer = NULL;
-    if (seat->is_selecting) {
+    if (seat->is_selecting && !seat->is_initial_selection) {
         buffer = anthywl_seat_selecting_draw_popup(seat);
     } else if (seat->is_composing
         && seat->buffer.len != 0
@@ -433,6 +434,7 @@ static bool anthywl_seat_composing_handle_key_event(
         if (seat->buffer.len == 0)
             return false;
         seat->is_selecting = true;
+        seat->is_initial_selection = true;
         anthy_reset_context(seat->anthy_context);
         anthy_set_string(seat->anthy_context, seat->buffer.text);
         struct anthy_conv_stat conv_stat;
@@ -523,6 +525,7 @@ static void anthywl_seat_selecting_commit(struct anthywl_seat *seat) {
     zwp_input_method_v2_commit(
         seat->zwp_input_method_v2, seat->done_events_received);
     seat->is_selecting = false;
+    seat->is_initial_selection = false;
     anthywl_buffer_clear(&seat->buffer);
 
     anthywl_seat_draw_popup(seat);
@@ -584,11 +587,13 @@ static bool anthywl_seat_selecting_handle_key_event(
         {
             seat->selected_candidates[seat->current_segment] += 1;
         }
+        seat->is_initial_selection = false;
         anthywl_seat_selecting_update(seat);
         return true;
     case XKB_KEY_Escape:
     case XKB_KEY_BackSpace:
         seat->is_selecting = false;
+        seat->is_initial_selection = false;
         anthywl_seat_composing_update(seat);
         return true;
     case XKB_KEY_Return:
@@ -615,6 +620,7 @@ static bool anthywl_seat_selecting_handle_key_event(
     case XKB_KEY_Up:
         if (seat->selected_candidates[seat->current_segment] != 0)
             seat->selected_candidates[seat->current_segment] -= 1;
+        seat->is_initial_selection = false;
         anthywl_seat_selecting_update(seat);
         return true;
     case XKB_KEY_Down:
@@ -623,6 +629,7 @@ static bool anthywl_seat_selecting_handle_key_event(
         {
             seat->selected_candidates[seat->current_segment] += 1;
         }
+        seat->is_initial_selection = false;
         anthywl_seat_selecting_update(seat);
         return true;
     default:
