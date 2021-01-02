@@ -336,7 +336,7 @@ static void anthywl_seat_init_protocols(struct anthywl_seat *seat) {
         &zwp_input_method_keyboard_grab_v2_listener, seat);
     seat->wl_surface = wl_compositor_create_surface(seat->state->wl_compositor);
     anthywl_seat_draw_popup(seat);
-    seat->zwp_input_popup_surface_v2=
+    seat->zwp_input_popup_surface_v2 =
         zwp_input_method_v2_get_input_popup_surface(
             seat->zwp_input_method_v2, seat->wl_surface);
     zwp_input_popup_surface_v2_add_listener(seat->zwp_input_popup_surface_v2,
