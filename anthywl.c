@@ -394,7 +394,7 @@ static bool anthywl_seat_composing_handle_key_event(
     xkb_keysym_t keysym = xkb_state_key_get_one_sym(seat->xkb_state, keycode);
 
     switch (keysym) {
-    case XKB_KEY_Super_R:
+    case XKB_KEY_Muhenkan:
         seat->is_composing = false;
         anthywl_buffer_clear(&seat->buffer);
         anthywl_seat_composing_update(seat);
@@ -640,8 +640,10 @@ static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
         return anthywl_seat_selecting_handle_key_event(seat, keycode);
     if (seat->is_composing)
         return anthywl_seat_composing_handle_key_event(seat, keycode);
-    if (keysym == XKB_KEY_Super_R)
+    if (keysym == XKB_KEY_Henkan_Mode) {
         seat->is_composing = true;
+        return true;
+    }
     return false;
 }
 

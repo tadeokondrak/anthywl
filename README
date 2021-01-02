@@ -7,8 +7,10 @@ https://github.com/swaywm/sway/pull/5890
 
 Currently hard-coded key bindings:
 
+Henkan_Mode: Enable input method
+Muhenkan: Disable input methbod
+
 Composing:
-Menu: Toggle preedit over-the-spot popup
 Space: Enter selection mode
 Escape: Clear preedit
 Return: Commit preedit
