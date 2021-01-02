@@ -279,7 +279,9 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
 static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
     struct anthywl_graphics_buffer *buffer = NULL;
-    if (seat->is_selecting && !seat->is_initial_selection) {
+    if (seat->is_selecting
+        && (!seat->is_initial_selection || seat->surrounding_text == NULL))
+    {
         buffer = anthywl_seat_selecting_draw_popup(seat);
     } else if (seat->is_composing
         && seat->buffer.len != 0
