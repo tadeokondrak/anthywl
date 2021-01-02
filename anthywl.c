@@ -93,7 +93,6 @@ struct anthywl_seat {
     // popup
     struct wl_surface *wl_surface;
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2;
-    bool show_preedit;
 };
 
 static void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
@@ -178,7 +177,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
     double max_x = 0;
     cairo_move_to(recording_cairo, x, y);
 
-    if (seat->show_preedit) {
+    if (seat->surrounding_text == NULL) {
         GString *markup = g_string_new(NULL);
         for (int i = 0; i < seat->segment_count; i++) {
             struct anthy_segment_stat segment_stat;
@@ -245,7 +244,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
     double half_border = BORDER / 2.0;
 
-    if (seat->show_preedit) {
+    if (seat->surrounding_text == NULL) {
         cairo_move_to(recording_cairo, half_border, line_y);
         cairo_line_to(recording_cairo, max_x, line_y);
         cairo_set_line_width(recording_cairo, BORDER);
@@ -279,10 +278,14 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
 static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
     struct anthywl_graphics_buffer *buffer = NULL;
-    if (seat->is_selecting)
+    if (seat->is_selecting) {
         buffer = anthywl_seat_selecting_draw_popup(seat);
-    else if (seat->is_composing && seat->buffer.len != 0 && seat->show_preedit)
+    } else if (seat->is_composing
+        && seat->buffer.len != 0
+        && seat->surrounding_text == NULL)
+    {
         buffer = anthywl_seat_composing_draw_popup(seat);
+    }
 
     if (buffer) {
         wl_surface_attach(seat->wl_surface, buffer->wl_buffer, 0, 0);
@@ -311,7 +314,6 @@ static void anthywl_seat_init(struct anthywl_seat *seat,
     seat->anthy_context = anthy_create_context();
     anthy_context_set_encoding(seat->anthy_context, ANTHY_UTF8_ENCODING);
     seat->is_composing = true;
-    seat->show_preedit = true;
 }
 
 static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener;
@@ -395,10 +397,6 @@ static bool anthywl_seat_composing_handle_key_event(
     case XKB_KEY_Super_R:
         seat->is_composing = false;
         anthywl_buffer_clear(&seat->buffer);
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_Menu:
-        seat->show_preedit = !seat->show_preedit;
         anthywl_seat_composing_update(seat);
         return true;
     case XKB_KEY_Escape:
@@ -579,10 +577,6 @@ static bool anthywl_seat_selecting_handle_key_event(
     case XKB_KEY_F8:
     case XKB_KEY_F9:
     case XKB_KEY_F10:
-        return true;
-    case XKB_KEY_Menu:
-        seat->show_preedit = !seat->show_preedit;
-        anthywl_seat_selecting_update(seat);
         return true;
     case XKB_KEY_space:
         if (seat->selected_candidates[seat->current_segment]
@@ -813,6 +807,11 @@ static void zwp_input_method_v2_activate(
 {
     struct anthywl_seat *seat = data;
     seat->pending_activate = true;
+    free(seat->pending_surrounding_text);
+    seat->pending_surrounding_text = NULL;
+    seat->pending_text_change_cause = 0;
+    seat->pending_content_type_hint = 0;
+    seat->pending_content_type_purpose = 0;
 }
 
 static void zwp_input_method_v2_deactivate(
