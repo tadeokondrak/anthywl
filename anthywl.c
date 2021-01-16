@@ -536,6 +536,9 @@ static void anthywl_seat_selecting_commit(struct anthywl_seat *seat) {
     wl_array_release(&buffer);
 }
 
+static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
+    xkb_keycode_t keycode);
+
 static bool anthywl_seat_selecting_handle_key_event(
     struct anthywl_seat *seat, xkb_keycode_t keycode)
 {
@@ -646,8 +649,7 @@ static bool anthywl_seat_selecting_handle_key_event(
         return true;
     default:
         anthywl_seat_selecting_commit(seat);
-        // FIXME: this key should be handled by the IME again after this
-        return false;
+        return anthywl_seat_handle_key(seat, keycode);
     }
 }
 
