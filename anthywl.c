@@ -570,6 +570,15 @@ static bool anthywl_seat_selecting_handle_key_event(
     anthy_get_segment_stat(
         seat->anthy_context, seat->current_segment, &segment_stat);
 
+    if (keysym >= XKB_KEY_1 && keysym <= XKB_KEY_9) {
+        int n = keysym - XKB_KEY_1;
+        if (n < segment_stat.nr_candidate - 1)
+            seat->selected_candidates[seat->current_segment] = n;
+        seat->is_initial_selection = false;
+        anthywl_seat_selecting_update(seat);
+        return true;
+    }
+
     switch (keysym) {
     case XKB_KEY_Shift_L:
     case XKB_KEY_Shift_R:
