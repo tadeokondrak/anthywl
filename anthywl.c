@@ -78,6 +78,7 @@ struct anthywl_seat {
     uint32_t repeat_delay;
     xkb_keycode_t pressed[64];
     xkb_keycode_t repeating_keycode;
+    uint32_t repeating_timestamp;
     struct anthywl_timer repeat_timer;
 
     // composing
@@ -678,8 +679,12 @@ static void timespec_correct(struct timespec *ts) {
 
 static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
     struct anthywl_seat *seat = wl_container_of(timer, seat, repeat_timer);
+    seat->repeating_timestamp += 1000 / seat->repeat_rate;
     if (!anthywl_seat_handle_key(seat, seat->repeating_keycode)) {
         wl_list_remove(&timer->link);
+        zwp_virtual_keyboard_v1_key(
+            seat->zwp_virtual_keyboard_v1, seat->repeating_timestamp,
+            seat->repeating_keycode - 8, WL_KEYBOARD_KEY_STATE_PRESSED);
         seat->repeating_keycode = 0;
     } else {
         clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
@@ -731,6 +736,7 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
         }
         if (xkb_keymap_key_repeats(seat->xkb_keymap, keycode)) {
             seat->repeating_keycode = keycode;
+            seat->repeating_timestamp = time + seat->repeat_delay;
             clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
             seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
             timespec_correct(&seat->repeat_timer.time);
@@ -757,6 +763,7 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
         && handled)
     {
         seat->repeating_keycode = keycode;
+        seat->repeating_timestamp = time + seat->repeat_delay;
         clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
         seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
         timespec_correct(&seat->repeat_timer.time);
