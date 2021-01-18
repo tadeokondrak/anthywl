@@ -20,6 +20,7 @@
 #include <xkbcommon/xkbcommon.h>
 
 #include "input-method-unstable-v2-client-protocol.h"
+#include "text-input-unstable-v3-client-protocol.h"
 #include "virtual-keyboard-unstable-v1-client-protocol.h"
 
 #include "buffer.h"

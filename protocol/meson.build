@@ -1,10 +1,13 @@
+wayland_protocols_dir = wayland_protocols_dep.get_variable(pkgconfig: 'pkgdatadir')
+
 wayland_scanner_dep = dependency('wayland-scanner', native: true)
 wayland_scanner_bin = find_program(
-	wayland_scanner_dep.get_variable(pkgconfig: 'wayland_scanner'),
-	native: true,
+    wayland_scanner_dep.get_variable(pkgconfig: 'wayland_scanner'),
+    native: true,
 )
 
 protocols = {
+    'text-input-v3': wayland_protocols_dir / 'unstable/text-input/text-input-unstable-v3.xml',
     'zwp-input-method-unstable-v2': 'input-method-unstable-v2.xml',
     'zwp-virtual-keyboard-unstable-v1': 'virtual-keyboard-unstable-v1.xml',
 }
