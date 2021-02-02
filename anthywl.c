@@ -26,6 +26,20 @@
 #include "buffer.h"
 #include "graphics_buffer.h"
 
+#define min(a, b)               \
+    ({                          \
+        __typeof__(a) _a = (a); \
+        __typeof__(b) _b = (b); \
+        _a < _b ? _a : _b;      \
+    })
+
+#define max(a, b)               \
+    ({                          \
+        __typeof__(a) _a = (a); \
+        __typeof__(b) _b = (b); \
+        _a > _b ? _a : _b;      \
+    })
+
 struct anthywl_state {
     bool running;
     struct wl_display *wl_display;
@@ -96,13 +110,16 @@ struct anthywl_seat {
     uint32_t repeating_timestamp;
     struct anthywl_timer repeat_timer;
 
+    // popup
+    struct anthywl_buffer buffer;
+
     // composing
     bool is_composing;
-    struct anthywl_buffer buffer;
+    bool is_composing_popup_visible;
 
     // selecting 
     bool is_selecting;
-    bool is_initial_selection;
+    bool is_selecting_popup_visible;
     int current_segment;
     int segment_count;
     int *selected_candidates;
@@ -199,7 +216,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
     double max_x = 0;
     cairo_move_to(recording_cairo, x, y);
 
-    if (seat->surrounding_text == NULL) {
+    if (seat->is_composing_popup_visible) {
         GString *markup = g_string_new(NULL);
         for (int i = 0; i < seat->segment_count; i++) {
             struct anthy_segment_stat segment_stat;
@@ -237,15 +254,23 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
         anthy_get_segment_stat(
             seat->anthy_context, seat->current_segment, &segment_stat);
         char buf[64];
-        for (int i = 0; i < segment_stat.nr_candidate; i++) {
+        int selected_candidate =
+            seat->selected_candidates[seat->current_segment];
+        int candidate_offset = selected_candidate / 5 * 5;
+        for (int i = candidate_offset;
+            i < min(candidate_offset + 5, segment_stat.nr_candidate); i++)
+        {
             anthy_get_segment(
                 seat->anthy_context, seat->current_segment, i, buf, sizeof buf);
             PangoAttrList *attrs = pango_attr_list_new();
-            if (i == seat->selected_candidates[seat->current_segment]) {
+            if (i == selected_candidate) {
                 PangoAttribute *attr = pango_attr_weight_new(PANGO_WEIGHT_BOLD);
                 pango_attr_list_insert(attrs, attr);
             }
-            pango_layout_set_text(layout, buf, -1);
+            char *text;
+            asprintf(&text, "%d. %s", i - candidate_offset + 1, buf);
+            pango_layout_set_text(layout, text, -1);
+            free(text);
             pango_layout_set_attributes(layout, attrs);
 
             PangoRectangle rect;
@@ -266,7 +291,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
     double half_border = BORDER / 2.0;
 
-    if (seat->surrounding_text == NULL) {
+    if (seat->is_composing_popup_visible) {
         cairo_move_to(recording_cairo, half_border, line_y);
         cairo_line_to(recording_cairo, max_x, line_y);
         cairo_set_line_width(recording_cairo, BORDER);
@@ -306,13 +331,11 @@ static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
     int scale = seat->scale != 0 ? seat->scale : seat->state->max_scale;
 
     struct anthywl_graphics_buffer *buffer = NULL;
-    if (seat->is_selecting
-        && (!seat->is_initial_selection || seat->surrounding_text == NULL))
-    {
+    if (seat->is_selecting && seat->is_selecting_popup_visible) {
         buffer = anthywl_seat_selecting_draw_popup(seat, scale);
     } else if (seat->is_composing
         && seat->buffer.len != 0
-        && seat->surrounding_text == NULL)
+        && seat->is_composing_popup_visible)
     {
         buffer = anthywl_seat_composing_draw_popup(seat, scale);
     }
@@ -470,10 +493,19 @@ static bool anthywl_seat_composing_handle_key_event(
     struct anthywl_seat *seat, xkb_keycode_t keycode)
 {
     xkb_keysym_t keysym = xkb_state_key_get_one_sym(seat->xkb_state, keycode);
+    bool ctrl_active = xkb_state_mod_name_is_active(
+        seat->xkb_state, XKB_MOD_NAME_CTRL, XKB_STATE_EFFECTIVE);
 
     switch (keysym) {
+    case XKB_KEY_Henkan_Mode:
+        if (!ctrl_active)
+            return false;
+        seat->is_composing_popup_visible = true;
+        anthywl_seat_composing_update(seat);
+        return true;
     case XKB_KEY_Muhenkan:
         seat->is_composing = false;
+        seat->is_composing_popup_visible = false;
         anthywl_buffer_clear(&seat->buffer);
         anthywl_seat_composing_update(seat);
         return true;
@@ -512,7 +544,7 @@ static bool anthywl_seat_composing_handle_key_event(
             return false;
         anthywl_buffer_convert_trailing_n(&seat->buffer);
         seat->is_selecting = true;
-        seat->is_initial_selection = true;
+        seat->is_selecting_popup_visible = seat->is_composing_popup_visible;
         anthy_reset_context(seat->anthy_context);
         anthy_set_string(seat->anthy_context, seat->buffer.text);
         struct anthy_conv_stat conv_stat;
@@ -603,7 +635,7 @@ static void anthywl_seat_selecting_commit(struct anthywl_seat *seat) {
     zwp_input_method_v2_commit(
         seat->zwp_input_method_v2, seat->done_events_received);
     seat->is_selecting = false;
-    seat->is_initial_selection = false;
+    seat->is_selecting_popup_visible = false;
     anthywl_buffer_clear(&seat->buffer);
 
     anthywl_seat_draw_popup(seat);
@@ -649,10 +681,15 @@ static bool anthywl_seat_selecting_handle_key_event(
         seat->anthy_context, seat->current_segment, &segment_stat);
 
     if (keysym >= XKB_KEY_1 && keysym <= XKB_KEY_9) {
+        int selected_candidate =
+            seat->selected_candidates[seat->current_segment];
+        int candidate_offset = selected_candidate / 5 * 5;
         int n = keysym - XKB_KEY_1;
-        if (n < segment_stat.nr_candidate - 1)
-            seat->selected_candidates[seat->current_segment] = n;
-        seat->is_initial_selection = false;
+        if (n + candidate_offset < segment_stat.nr_candidate - 1) {
+            seat->selected_candidates[seat->current_segment] =
+                candidate_offset + n;
+        }
+        seat->is_selecting_popup_visible = true;
         anthywl_seat_selecting_update(seat);
         return true;
     }
@@ -677,13 +714,13 @@ static bool anthywl_seat_selecting_handle_key_event(
         {
             seat->selected_candidates[seat->current_segment] += 1;
         }
-        seat->is_initial_selection = false;
+        seat->is_selecting_popup_visible = true;
         anthywl_seat_selecting_update(seat);
         return true;
     case XKB_KEY_Escape:
     case XKB_KEY_BackSpace:
         seat->is_selecting = false;
-        seat->is_initial_selection = false;
+        seat->is_selecting_popup_visible = true;
         anthywl_seat_composing_update(seat);
         return true;
     case XKB_KEY_Return:
@@ -710,7 +747,7 @@ static bool anthywl_seat_selecting_handle_key_event(
     case XKB_KEY_Up:
         if (seat->selected_candidates[seat->current_segment] != 0)
             seat->selected_candidates[seat->current_segment] -= 1;
-        seat->is_initial_selection = false;
+        seat->is_selecting_popup_visible = true;
         anthywl_seat_selecting_update(seat);
         return true;
     case XKB_KEY_Down:
@@ -719,7 +756,7 @@ static bool anthywl_seat_selecting_handle_key_event(
         {
             seat->selected_candidates[seat->current_segment] += 1;
         }
-        seat->is_initial_selection = false;
+        seat->is_selecting_popup_visible = true;
         anthywl_seat_selecting_update(seat);
         return true;
     default:
@@ -738,6 +775,9 @@ static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
         return anthywl_seat_composing_handle_key_event(seat, keycode);
     if (keysym == XKB_KEY_Henkan_Mode) {
         seat->is_composing = true;
+        seat->is_composing_popup_visible =
+            xkb_state_mod_name_is_active(
+                seat->xkb_state, XKB_MOD_NAME_CTRL, XKB_STATE_EFFECTIVE);
         return true;
     }
     return false;
@@ -970,6 +1010,8 @@ static void zwp_input_method_v2_done(
     seat->done_events_received++;
     if (!was_active && seat->active) {
         seat->is_selecting = false;
+        seat->is_composing_popup_visible = false;
+        seat->is_selecting_popup_visible = false;
         anthywl_buffer_clear(&seat->buffer);
         anthywl_seat_draw_popup(seat);
     }
