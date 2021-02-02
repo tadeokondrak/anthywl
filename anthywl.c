@@ -1075,9 +1075,14 @@ static void anthywl_seat_cursor_update(struct anthywl_seat *seat) {
     wl_pointer_set_cursor(
         seat->wl_pointer, seat->wl_pointer_serial, seat->wl_surface_cursor,
         wl_cursor_image->hotspot_x / scale, wl_cursor_image->hotspot_y / scale);
-    clock_gettime(CLOCK_MONOTONIC, &seat->cursor_timer.time);
-    seat->cursor_timer.time.tv_nsec += 1000000 * duration;
-    timespec_correct(&seat->cursor_timer.time);
+    if (duration == 0) {
+        wl_list_remove(&seat->cursor_timer.link);
+        wl_list_init(&seat->cursor_timer.link);
+    } else {
+        clock_gettime(CLOCK_MONOTONIC, &seat->cursor_timer.time);
+        seat->cursor_timer.time.tv_nsec += 1000000 * duration;
+        timespec_correct(&seat->cursor_timer.time);
+    }
 }
 
 static void anthywl_seat_cursor_timer_callback(struct anthywl_timer *timer) {
@@ -1091,8 +1096,8 @@ static void wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
 {
     struct anthywl_seat *seat = data;
     seat->wl_pointer_serial = serial;
-    anthywl_seat_cursor_update(seat);
     wl_list_insert(&seat->state->timers, &seat->cursor_timer.link);
+    anthywl_seat_cursor_update(seat);
 }
 
 static void wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
