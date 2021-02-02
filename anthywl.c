@@ -375,7 +375,7 @@ static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener;
 static struct zwp_input_method_keyboard_grab_v2_listener const
     zwp_input_method_keyboard_grab_v2_listener;
 
-void wl_surface_enter(void *data, struct wl_surface *wl_surface,
+static void wl_surface_enter(void *data, struct wl_surface *wl_surface,
     struct wl_output *wl_output)
 {
     struct anthywl_seat *seat = data;
@@ -388,11 +388,12 @@ void wl_surface_enter(void *data, struct wl_surface *wl_surface,
         }
     }
     *(void **)wl_array_add(&seat->outputs, sizeof(void *)) = output;
-rescale:
-    seat->scale = output->scale > seat->scale ? output->scale : seat->scale;
+rescale:;
+    int scale = output->scale > seat->scale ? output->scale : seat->scale;
+    seat->scale = scale;
 }
 
-void wl_surface_leave(void *data, struct wl_surface *wl_surface,
+static void wl_surface_leave(void *data, struct wl_surface *wl_surface,
     struct wl_output *wl_output)
 {
     struct anthywl_seat *seat = data;
@@ -1041,7 +1042,9 @@ void wl_seat_capabilities(void *data, struct wl_seat *wl_seat,
 {
 }
 
-void wl_seat_name(void *data, struct wl_seat *wl_seat, char const *name) {
+static void wl_seat_name(void *data, struct wl_seat *wl_seat,
+    char const *name)
+{
     struct anthywl_seat *seat = data;
     free(seat->name);
     seat->name = strdup(name);
@@ -1059,18 +1062,18 @@ static void wl_seat_global(struct anthywl_state *state, void *data) {
     wl_list_insert(&state->seats, &seat->link);
 }
 
-void wl_output_geometry(void *data, struct wl_output *wl_output,
+static void wl_output_geometry(void *data, struct wl_output *wl_output,
     int32_t x, int32_t y, int32_t physical_width, int32_t physical_height,
     int32_t subpixel, const char *make, const char *model, int32_t transform)
 {
 }
 
-void wl_output_mode(void *data, struct wl_output *wl_output,
+static void wl_output_mode(void *data, struct wl_output *wl_output,
     uint32_t flags, int32_t width, int32_t height, int32_t refresh)
 {
 }
  
-void wl_output_done(void *data, struct wl_output *wl_output) {
+static void wl_output_done(void *data, struct wl_output *wl_output) {
     struct anthywl_output *output = data;
     output->scale = output->pending_scale;
 
@@ -1083,7 +1086,7 @@ void wl_output_done(void *data, struct wl_output *wl_output) {
     output->state->max_scale = scale;
 }
 
-void wl_output_scale(void *data, struct wl_output *wl_output,
+static void wl_output_scale(void *data, struct wl_output *wl_output,
     int32_t factor)
 {
     struct anthywl_output *output = data;

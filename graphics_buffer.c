@@ -68,7 +68,7 @@ struct anthywl_graphics_buffer *anthywl_graphics_buffer_get(
     bool found = false;
 
     struct anthywl_graphics_buffer *buffer, *tmp;
-    wl_list_for_each_safe (buffer, tmp, buffers, link) {
+    wl_list_for_each_safe(buffer, tmp, buffers, link) {
         if (buffer->in_use)
             continue;
         if (buffer->width != width || buffer->height != height) {
