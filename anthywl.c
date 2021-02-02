@@ -803,7 +803,7 @@ static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
 }
 
 static void timespec_correct(struct timespec *ts) {
-    if (ts->tv_nsec >= 1000000000) {
+    while (ts->tv_nsec >= 1000000000) {
         ts->tv_sec += 1;
         ts->tv_nsec -= 1000000000;
     }
