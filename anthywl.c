@@ -17,6 +17,7 @@
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
 #include <wayland-client.h>
+#include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
 
 #include "input-method-unstable-v2-client-protocol.h"
@@ -48,6 +49,9 @@ struct anthywl_state {
     struct wl_shm *wl_shm;
     struct zwp_input_method_manager_v2 *zwp_input_method_manager_v2;
     struct zwp_virtual_keyboard_manager_v1 *zwp_virtual_keyboard_manager_v1;
+    struct wl_cursor_theme *wl_cursor_theme;
+    int wl_cursor_theme_size;
+    int wl_cursor_theme_scale;
     struct wl_list buffers;
     struct wl_list seats;
     struct wl_list outputs;
@@ -79,6 +83,12 @@ struct anthywl_seat {
     struct zwp_input_method_v2 *zwp_input_method_v2;
     struct zwp_input_method_keyboard_grab_v2 *zwp_input_method_keyboard_grab_v2;
     struct zwp_virtual_keyboard_v1 *zwp_virtual_keyboard_v1;
+
+    // wl_pointer
+    struct wl_pointer *wl_pointer;
+    uint32_t wl_pointer_serial;
+    struct wl_surface *wl_surface_cursor;
+    struct anthywl_timer cursor_timer;
 
     char *xkb_keymap_string;
     struct xkb_context *xkb_context;
@@ -354,6 +364,8 @@ static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
 
 static struct wl_seat_listener const wl_seat_listener;
 static void anthywl_seat_init_protocols(struct anthywl_seat *seat);
+static void anthywl_seat_cursor_timer_callback(struct anthywl_timer *timer);
+static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer);
 
 static void anthywl_seat_init(struct anthywl_seat *seat,
     struct anthywl_state *state, struct wl_seat *wl_seat)
@@ -362,12 +374,14 @@ static void anthywl_seat_init(struct anthywl_seat *seat,
     seat->wl_seat = wl_seat;
     wl_seat_add_listener(wl_seat, &wl_seat_listener, seat);
     seat->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    seat->cursor_timer.callback = anthywl_seat_cursor_timer_callback;
     wl_array_init(&seat->outputs);
     if (state->running)
         anthywl_seat_init_protocols(seat);
     anthywl_buffer_init(&seat->buffer);
     seat->anthy_context = anthy_create_context();
     anthy_context_set_encoding(seat->anthy_context, ANTHY_UTF8_ENCODING);
+    seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
     seat->is_composing = true;
 }
 
@@ -443,6 +457,10 @@ static void anthywl_seat_init_protocols(struct anthywl_seat *seat) {
             seat->zwp_input_method_v2, seat->wl_surface);
     zwp_input_popup_surface_v2_add_listener(seat->zwp_input_popup_surface_v2,
         &zwp_input_popup_surface_v2_listener, seat);
+    seat->wl_surface_cursor =
+        wl_compositor_create_surface(seat->state->wl_compositor);
+    wl_surface_add_listener(
+        seat->wl_surface_cursor, &wl_surface_listener, seat);
     seat->are_protocols_initted = true;
 }
 
@@ -804,7 +822,6 @@ static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
         clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
         timer->time.tv_nsec += 1000000000 / seat->repeat_rate;
         timespec_correct(&timer->time);
-        timer->callback = anthywl_seat_repeat_timer_callback;
     }
 }
 
@@ -854,7 +871,6 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
             clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
             seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
             timespec_correct(&seat->repeat_timer.time);
-            seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
         } else {
             seat->repeating_keycode = 0;
         }
@@ -881,7 +897,6 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
         clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
         seat->repeat_timer.time.tv_nsec += seat->repeat_delay * 1000000;
         timespec_correct(&seat->repeat_timer.time);
-        seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
         wl_list_insert(&seat->state->timers, &seat->repeat_timer.link);
         return;
     }
@@ -1037,9 +1052,116 @@ static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener =
     .unavailable = zwp_input_method_v2_unavailable,
 };
 
-void wl_seat_capabilities(void *data, struct wl_seat *wl_seat,
+static void anthywl_seat_cursor_timer_callback(struct anthywl_timer *timer);
+static void anthywl_reload_cursor_theme(struct anthywl_state *state);
+
+static void anthywl_seat_cursor_update(struct anthywl_seat *seat) {
+    uint32_t duration;
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    int scale = seat->state->wl_cursor_theme_scale;
+    struct wl_cursor_theme *wl_cursor_theme = seat->state->wl_cursor_theme;
+    struct wl_cursor *wl_cursor =
+        wl_cursor_theme_get_cursor(wl_cursor_theme, "progress");
+    int time_ms = (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
+    int frame =
+        wl_cursor_frame_and_duration(wl_cursor, time_ms, &duration);
+    struct wl_cursor_image *wl_cursor_image = wl_cursor->images[frame];
+    struct wl_buffer *wl_buffer = wl_cursor_image_get_buffer(wl_cursor_image);
+    wl_surface_attach(seat->wl_surface_cursor, wl_buffer, 0, 0);
+    wl_surface_damage(seat->wl_surface_cursor, 0, 0, INT32_MAX, INT32_MAX);
+    wl_surface_set_buffer_scale(seat->wl_surface_cursor, scale);
+    wl_surface_commit(seat->wl_surface_cursor);
+    wl_pointer_set_cursor(
+        seat->wl_pointer, seat->wl_pointer_serial, seat->wl_surface_cursor,
+        wl_cursor_image->hotspot_x / scale, wl_cursor_image->hotspot_y / scale);
+    clock_gettime(CLOCK_MONOTONIC, &seat->cursor_timer.time);
+    seat->cursor_timer.time.tv_nsec += 1000000 * duration;
+    timespec_correct(&seat->cursor_timer.time);
+}
+
+static void anthywl_seat_cursor_timer_callback(struct anthywl_timer *timer) {
+    struct anthywl_seat *seat = wl_container_of(timer, seat, cursor_timer);
+    anthywl_seat_cursor_update(seat);
+}
+
+static void wl_pointer_enter(void *data, struct wl_pointer *wl_pointer,
+    uint32_t serial, struct wl_surface *surface,
+    wl_fixed_t surface_x, wl_fixed_t surface_y)
+{
+    struct anthywl_seat *seat = data;
+    seat->wl_pointer_serial = serial;
+    anthywl_seat_cursor_update(seat);
+    wl_list_insert(&seat->state->timers, &seat->cursor_timer.link);
+}
+
+static void wl_pointer_leave(void *data, struct wl_pointer *wl_pointer,
+    uint32_t serial, struct wl_surface *surface)
+{
+    struct anthywl_seat *seat = data;
+    wl_list_remove(&seat->cursor_timer.link);
+}
+
+static void wl_pointer_motion(void *data, struct wl_pointer *wl_pointer,
+    uint32_t time, wl_fixed_t surface_x, wl_fixed_t surface_y)
+{
+}
+
+static void wl_pointer_button(void *data, struct wl_pointer *wl_pointer,
+    uint32_t serial, uint32_t time, uint32_t button, uint32_t state)
+{
+}
+
+static void wl_pointer_axis(void *data, struct wl_pointer *wl_pointer,
+    uint32_t time, uint32_t axis, wl_fixed_t value)
+{
+}
+
+static void wl_pointer_frame(void *data, struct wl_pointer *wl_pointer) {
+}
+
+static void wl_pointer_axis_source(void *data, struct wl_pointer *wl_pointer,
+    uint32_t axis_source)
+{
+}
+
+static void wl_pointer_axis_stop(void *data, struct wl_pointer *wl_pointer,
+    uint32_t time, uint32_t axis)
+{
+}
+
+static void wl_pointer_axis_discrete(void *data, struct wl_pointer *wl_pointer,
+    uint32_t axis, int32_t discrete)
+{
+}
+
+static struct wl_pointer_listener const wl_pointer_listener = {
+    .enter = wl_pointer_enter,
+    .leave = wl_pointer_leave,
+    .motion = wl_pointer_motion,
+    .button = wl_pointer_button,
+    .axis = wl_pointer_axis,
+    .frame = wl_pointer_frame,
+    .axis_source = wl_pointer_axis_source,
+    .axis_stop = wl_pointer_axis_stop,
+    .axis_discrete = wl_pointer_axis_discrete,
+};
+
+static void wl_seat_capabilities(void *data, struct wl_seat *wl_seat,
     uint32_t capabilities)
 {
+    struct anthywl_seat *seat = data;
+    if ((capabilities & WL_SEAT_CAPABILITY_POINTER) && seat->wl_pointer == NULL)
+    {
+        seat->wl_pointer = wl_seat_get_pointer(wl_seat);
+        wl_pointer_add_listener(seat->wl_pointer, &wl_pointer_listener, seat);
+    }
+    if (!(capabilities & WL_SEAT_CAPABILITY_POINTER)
+        && seat->wl_pointer != NULL)
+    {
+        wl_pointer_release(seat->wl_pointer);
+        seat->wl_pointer = NULL;
+    }
 }
 
 static void wl_seat_name(void *data, struct wl_seat *wl_seat,
@@ -1084,6 +1206,8 @@ static void wl_output_done(void *data, struct wl_output *wl_output) {
             scale = output_iter->scale;
     }
     output->state->max_scale = scale;
+    if (output->state->wl_cursor_theme_scale != output->state->max_scale / 24)
+        anthywl_reload_cursor_theme(output->state);
 }
 
 static void wl_output_scale(void *data, struct wl_output *wl_output,
@@ -1202,6 +1326,25 @@ static struct wl_registry_listener const wl_registry_listener = {
     .global_remove = wl_registry_global_remove,
 };
 
+static void anthywl_reload_cursor_theme(struct anthywl_state *state) {
+    const char *cursor_theme = getenv("XCURSOR_THEME");
+    const char *env_cursor_size = getenv("XCURSOR_SIZE");
+    int cursor_size = 24;
+    if (env_cursor_size && strlen(env_cursor_size) > 0) {
+        errno = 0;
+        char *end;
+        unsigned size = strtoul(env_cursor_size, &end, 10);
+        if (!*end && errno == 0)
+            cursor_size = size;
+    }
+    if (state->wl_cursor_theme != NULL)
+        wl_cursor_theme_destroy(state->wl_cursor_theme);
+    state->wl_cursor_theme = wl_cursor_theme_load(
+        cursor_theme, cursor_size * state->max_scale, state->wl_shm);
+    state->wl_cursor_theme_size = cursor_size;
+    state->wl_cursor_theme_scale = state->max_scale;
+}
+
 static bool anthywl_state_init(struct anthywl_state *state) {
     wl_list_init(&state->buffers);
     wl_list_init(&state->seats);
@@ -1232,6 +1375,8 @@ static bool anthywl_state_init(struct anthywl_state *state) {
             return false;
         }
     }
+
+    anthywl_reload_cursor_theme(state);
 
     struct anthywl_seat *seat;
     wl_list_for_each(seat, &state->seats, link)
@@ -1329,6 +1474,8 @@ static void anthywl_state_finish(struct anthywl_state *state) {
     {
         anthywl_graphics_buffer_destroy(graphics_buffer);
     }
+    if (state->wl_cursor_theme != NULL)
+        wl_cursor_theme_destroy(state->wl_cursor_theme);
     if (state->zwp_virtual_keyboard_manager_v1 != NULL) {
         zwp_virtual_keyboard_manager_v1_destroy(
             state->zwp_virtual_keyboard_manager_v1);

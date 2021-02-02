@@ -19,6 +19,7 @@ cc = meson.get_compiler('c')
 
 rt_dep = cc.find_library('rt')
 wayland_client_dep = dependency('wayland-client')
+wayland_cursor_dep = dependency('wayland-cursor')
 wayland_protocols_dep = dependency('wayland-protocols')
 xkbcommon_dep = dependency('xkbcommon')
 anthy_dep = dependency('anthy')
@@ -35,6 +36,7 @@ anthywl_bin = executable(
     'graphics_buffer.c',
     dependencies: [
         wayland_client_dep,
+        wayland_cursor_dep,
         xkbcommon_dep,
         protocols_dep,
         anthy_dep,
