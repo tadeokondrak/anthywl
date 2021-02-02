@@ -1062,7 +1062,7 @@ static void anthywl_seat_cursor_update(struct anthywl_seat *seat) {
     int scale = seat->state->wl_cursor_theme_scale;
     struct wl_cursor_theme *wl_cursor_theme = seat->state->wl_cursor_theme;
     struct wl_cursor *wl_cursor =
-        wl_cursor_theme_get_cursor(wl_cursor_theme, "progress");
+        wl_cursor_theme_get_cursor(wl_cursor_theme, "left_ptr");
     int time_ms = (int64_t)now.tv_sec * 1000 + now.tv_nsec / 1000000;
     int frame =
         wl_cursor_frame_and_duration(wl_cursor, time_ms, &duration);
