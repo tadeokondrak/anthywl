@@ -75,6 +75,8 @@ struct anthywl_graphics_buffer *anthywl_graphics_buffer_get(
             anthywl_graphics_buffer_destroy(buffer);
             continue;
         }
+        cairo_destroy(buffer->cairo);
+        buffer->cairo = cairo_create(buffer->cairo_surface);
         found = true;
         break;
     }

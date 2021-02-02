@@ -36,13 +36,24 @@ struct anthywl_state {
     struct zwp_virtual_keyboard_manager_v1 *zwp_virtual_keyboard_manager_v1;
     struct wl_list buffers;
     struct wl_list seats;
+    struct wl_list outputs;
     struct wl_list timers;
+    int max_scale;
 };
 
 struct anthywl_timer {
     struct wl_list link;
     struct timespec time;
     void (*callback)(struct anthywl_timer *timer);
+};
+
+struct anthywl_output {
+    struct wl_list link;
+    struct anthywl_state *state;
+
+    struct wl_list seats;
+    struct wl_output *wl_output;
+    int pending_scale, scale;
 };
 
 struct anthywl_seat {
@@ -62,6 +73,10 @@ struct anthywl_seat {
 
     // wl_seat
     char *name;
+
+    // wl_output
+    struct wl_array outputs;
+    int scale;
 
     // zwp_input_method_v2
     bool pending_activate, active;
@@ -114,7 +129,7 @@ static struct zwp_input_popup_surface_v2_listener const
 #define PADDING (5.0)
 
 static struct anthywl_graphics_buffer *anthywl_seat_composing_draw_popup(
-    struct anthywl_seat *seat)
+    struct anthywl_seat *seat, int scale)
 {
     cairo_surface_t *recording_cairo_surface =
         cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, NULL);
@@ -158,7 +173,11 @@ static struct anthywl_graphics_buffer *anthywl_seat_composing_draw_popup(
 
     struct anthywl_graphics_buffer *buffer = anthywl_graphics_buffer_get(
         seat->state->wl_shm, &seat->state->buffers,
-        surface_width, surface_height);
+        surface_width * scale, surface_height * scale);
+    cairo_scale(buffer->cairo, scale, scale);
+    cairo_set_operator(buffer->cairo, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(buffer->cairo);
+    cairo_set_operator(buffer->cairo, CAIRO_OPERATOR_OVER);
     cairo_set_source_rgba(buffer->cairo, 0.0, 0.0, 0.0, 1.0);
     cairo_paint(buffer->cairo);
     cairo_set_source_surface(buffer->cairo, recording_cairo_surface, 0.0, 0.0);
@@ -168,7 +187,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_composing_draw_popup(
 }
 
 static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
-    struct anthywl_seat *seat)
+    struct anthywl_seat *seat, int scale)
 {
     cairo_surface_t *recording_cairo_surface =
         cairo_recording_surface_create(CAIRO_CONTENT_COLOR_ALPHA, NULL);
@@ -270,7 +289,11 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 
     struct anthywl_graphics_buffer *buffer = anthywl_graphics_buffer_get(
         seat->state->wl_shm, &seat->state->buffers,
-        surface_width, surface_height);
+        surface_width * scale, surface_height * scale);
+    cairo_scale(buffer->cairo, scale, scale);
+    cairo_set_operator(buffer->cairo, CAIRO_OPERATOR_CLEAR);
+    cairo_paint(buffer->cairo);
+    cairo_set_operator(buffer->cairo, CAIRO_OPERATOR_OVER);
     cairo_set_source_rgba(buffer->cairo, 0.0, 0.0, 0.0, 1.0);
     cairo_paint(buffer->cairo);
     cairo_set_source_surface(buffer->cairo, recording_cairo_surface, 0.0, 0.0);
@@ -280,22 +303,25 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
 }
 
 static void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
+    int scale = seat->scale != 0 ? seat->scale : seat->state->max_scale;
+
     struct anthywl_graphics_buffer *buffer = NULL;
     if (seat->is_selecting
         && (!seat->is_initial_selection || seat->surrounding_text == NULL))
     {
-        buffer = anthywl_seat_selecting_draw_popup(seat);
+        buffer = anthywl_seat_selecting_draw_popup(seat, scale);
     } else if (seat->is_composing
         && seat->buffer.len != 0
         && seat->surrounding_text == NULL)
     {
-        buffer = anthywl_seat_composing_draw_popup(seat);
+        buffer = anthywl_seat_composing_draw_popup(seat, scale);
     }
 
     if (buffer) {
         wl_surface_attach(seat->wl_surface, buffer->wl_buffer, 0, 0);
         wl_surface_damage_buffer(seat->wl_surface, 0, 0,
             buffer->width, buffer->height);
+        wl_surface_set_buffer_scale(seat->wl_surface, scale);
     } else {
         wl_surface_attach(seat->wl_surface, NULL, 0, 0);
     }
@@ -313,6 +339,7 @@ static void anthywl_seat_init(struct anthywl_seat *seat,
     seat->wl_seat = wl_seat;
     wl_seat_add_listener(wl_seat, &wl_seat_listener, seat);
     seat->xkb_context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    wl_array_init(&seat->outputs);
     if (state->running)
         anthywl_seat_init_protocols(seat);
     anthywl_buffer_init(&seat->buffer);
@@ -324,6 +351,51 @@ static void anthywl_seat_init(struct anthywl_seat *seat,
 static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener;
 static struct zwp_input_method_keyboard_grab_v2_listener const
     zwp_input_method_keyboard_grab_v2_listener;
+
+void wl_surface_enter(void *data, struct wl_surface *wl_surface,
+    struct wl_output *wl_output)
+{
+    struct anthywl_seat *seat = data;
+    struct anthywl_output *output = wl_output_get_user_data(wl_output);
+    struct anthywl_output **output_iter;
+    wl_array_for_each(output_iter, &seat->outputs) {
+        if (*output_iter == NULL) {
+            *output_iter = output;
+            goto rescale;
+        }
+    }
+    *(void **)wl_array_add(&seat->outputs, sizeof(void *)) = output;
+rescale:
+    seat->scale = output->scale > seat->scale ? output->scale : seat->scale;
+}
+
+void wl_surface_leave(void *data, struct wl_surface *wl_surface,
+    struct wl_output *wl_output)
+{
+    struct anthywl_seat *seat = data;
+    struct anthywl_output *output = wl_output_get_user_data(wl_output);
+    seat->scale = output->scale;
+    struct anthywl_output **output_iter;
+    wl_array_for_each(output_iter, &seat->outputs) {
+        if (*output_iter == output) {
+            *output_iter = NULL;
+            break;
+        }
+    }
+    int scale = 0;
+    wl_array_for_each(output_iter, &seat->outputs) {
+        int scale_iter = *output_iter != NULL
+            ? (*output_iter)->scale
+            : 0;
+        scale = scale_iter > scale ? scale_iter : scale;
+    }
+    seat->scale = scale;
+}
+
+static struct wl_surface_listener const wl_surface_listener = {
+    .enter = wl_surface_enter,
+    .leave = wl_surface_leave,
+};
 
 static void anthywl_seat_init_protocols(struct anthywl_seat *seat) {
     seat->zwp_input_method_v2 =
@@ -340,6 +412,7 @@ static void anthywl_seat_init_protocols(struct anthywl_seat *seat) {
         seat->zwp_input_method_keyboard_grab_v2,
         &zwp_input_method_keyboard_grab_v2_listener, seat);
     seat->wl_surface = wl_compositor_create_surface(seat->state->wl_compositor);
+    wl_surface_add_listener(seat->wl_surface, &wl_surface_listener, seat);
     anthywl_seat_draw_popup(seat);
     seat->zwp_input_popup_surface_v2 =
         zwp_input_method_v2_get_input_popup_surface(
@@ -944,6 +1017,53 @@ static void wl_seat_global(struct anthywl_state *state, void *data) {
     wl_list_insert(&state->seats, &seat->link);
 }
 
+void wl_output_geometry(void *data, struct wl_output *wl_output,
+    int32_t x, int32_t y, int32_t physical_width, int32_t physical_height,
+    int32_t subpixel, const char *make, const char *model, int32_t transform)
+{
+}
+
+void wl_output_mode(void *data, struct wl_output *wl_output,
+    uint32_t flags, int32_t width, int32_t height, int32_t refresh)
+{
+}
+ 
+void wl_output_done(void *data, struct wl_output *wl_output) {
+    struct anthywl_output *output = data;
+    output->scale = output->pending_scale;
+
+    int scale = 0;
+    struct anthywl_output *output_iter;
+    wl_list_for_each(output_iter, &output->state->outputs, link) {
+        if (output_iter->scale > scale)
+            scale = output_iter->scale;
+    }
+    output->state->max_scale = scale;
+}
+
+void wl_output_scale(void *data, struct wl_output *wl_output,
+    int32_t factor)
+{
+    struct anthywl_output *output = data;
+    output->pending_scale = factor;
+}
+
+static struct wl_output_listener const wl_output_listener = {
+    .geometry = wl_output_geometry,
+    .mode = wl_output_mode,
+    .done = wl_output_done,
+    .scale = wl_output_scale,
+};
+
+static void wl_output_global(struct anthywl_state *state, void *data) {
+    struct wl_output *wl_output = data;
+    struct anthywl_output *output = calloc(1, sizeof *output);
+    output->state = state;
+    output->wl_output = wl_output;
+    wl_output_add_listener(output->wl_output, &wl_output_listener, output);
+    wl_list_insert(&state->outputs, &output->link);
+}
+
 struct anthywl_global {
     char const *name;
     struct wl_interface const *interface;
@@ -968,6 +1088,13 @@ static struct anthywl_global const globals[] = {
         .version = 4,
         .is_singleton = true,
         .offset = offsetof(struct anthywl_state, wl_compositor),
+    },
+    {
+        .name = "wl_output",
+        .interface = &wl_output_interface,
+        .version = 3,
+        .is_singleton = false,
+        .callback = wl_output_global,
     },
     {
         .name = "wl_seat",
@@ -1022,6 +1149,7 @@ static void wl_registry_global(void *data, struct wl_registry *wl_registry,
 static void wl_registry_global_remove(void *data,
     struct wl_registry *wl_registry, uint32_t name)
 {
+    // TODO
 }
 
 static struct wl_registry_listener const wl_registry_listener = {
@@ -1032,7 +1160,9 @@ static struct wl_registry_listener const wl_registry_listener = {
 static bool anthywl_state_init(struct anthywl_state *state) {
     wl_list_init(&state->buffers);
     wl_list_init(&state->seats);
+    wl_list_init(&state->outputs);
     wl_list_init(&state->timers);
+    state->max_scale = 1;
  
     state->wl_display = wl_display_connect(NULL);
     if (state->wl_display == NULL) {
