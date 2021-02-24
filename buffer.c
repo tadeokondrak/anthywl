@@ -150,7 +150,6 @@ static char const *const n_pairs[128] = {
     ['v'] = "んv",
     ['w'] = "んw",
     ['x'] = "んx",
-    ['y'] = "んy",
     ['z'] = "んz",
 };
 
