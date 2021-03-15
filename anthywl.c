@@ -68,8 +68,6 @@ struct anthywl_timer {
 struct anthywl_output {
     struct wl_list link;
     struct anthywl_state *state;
-
-    struct wl_list seats;
     struct wl_output *wl_output;
     int pending_scale, scale;
 };
