@@ -22,7 +22,7 @@ static struct anthywl_graphics_buffer *anthywl_graphics_buffer_create(
     buffer->height = height;
     buffer->stride =
         cairo_format_stride_for_width(CAIRO_FORMAT_ARGB32, buffer->width);
-    buffer->size = buffer->width * buffer->stride * buffer->height;
+    buffer->size = buffer->stride * buffer->height;
     buffer->in_use = true;
     int fd = memfd_create("anthywl", MFD_CLOEXEC);
     int rc = ftruncate(fd, buffer->size); (void)rc;
