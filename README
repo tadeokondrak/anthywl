@@ -1,12 +1,13 @@
 anthywl
 Work-in-progress Japanese input method for sway
 
-Required patches:
+Required patches for popup support:
 https://github.com/swaywm/wlroots/pull/2550 
 https://github.com/swaywm/sway/pull/5890
 
 Currently hard-coded key bindings:
 
+Ctrl+Henkan_Mode: Enable input method with always-on-popup
 Henkan_Mode: Enable input method
 Muhenkan: Disable input methbod
 
@@ -24,3 +25,6 @@ Right: Next segment
 Shift-Left: Shrink segment
 Shift-Right: Enlarge segment
 Return: Commit selection
+
+Any feedback on how things should work is appreciated, open a GitHub
+issue or "discussion" if you have any.
