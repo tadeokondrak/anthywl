@@ -7,7 +7,6 @@ https://github.com/swaywm/sway/pull/5890
 
 Currently hard-coded key bindings:
 
-Ctrl+Henkan_Mode: Enable input method with always-on-popup
 Henkan_Mode: Enable input method
 Muhenkan: Disable input methbod
 
