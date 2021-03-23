@@ -1010,6 +1010,8 @@ static void zwp_input_method_v2_done(
     seat->content_type_hint = seat->pending_content_type_hint;
     seat->content_type_purpose = seat->pending_content_type_purpose;
     seat->done_events_received++;
+    seat->is_composing_popup_visible = !(seat->content_type_hint
+        & ZWP_TEXT_INPUT_V3_CONTENT_HINT_PREEDIT_SHOWN);
     if (!was_active && seat->active) {
         seat->is_selecting = false;
         seat->is_selecting_popup_visible = false;
