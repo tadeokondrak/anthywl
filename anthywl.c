@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <errno.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -16,6 +17,7 @@
 #include <cairo.h>
 #include <pango/pango.h>
 #include <pango/pangocairo.h>
+#include <scfg.h>
 #include <wayland-client.h>
 #include <wayland-cursor.h>
 #include <xkbcommon/xkbcommon.h>
@@ -41,6 +43,49 @@
         _a > _b ? _a : _b;      \
     })
 
+enum anthywl_modifier {
+    ANTHYWL_SHIFT_INDEX,
+    ANTHYWL_CAPS_INDEX,
+    ANTHYWL_CTRL_INDEX,
+    ANTHYWL_ALT_INDEX,
+    ANTHYWL_NUM_INDEX,
+    ANTHYWL_MOD3_INDEX,
+    ANTHYWL_LOGO_INDEX,
+    ANTHYWL_MOD5_INDEX,
+
+    ANTHYWL_MODIFIER_COUNT,
+
+    ANTHYWL_SHIFT = 1 << ANTHYWL_SHIFT_INDEX,
+    ANTHYWL_CAPS = 1 << ANTHYWL_CAPS_INDEX,
+    ANTHYWL_CTRL = 1 << ANTHYWL_CTRL_INDEX,
+    ANTHYWL_ALT = 1 << ANTHYWL_ALT_INDEX,
+    ANTHYWL_NUM = 1 << ANTHYWL_NUM_INDEX,
+    ANTHYWL_MOD3 = 1 << ANTHYWL_MOD3_INDEX,
+    ANTHYWL_LOGO = 1 << ANTHYWL_LOGO_INDEX,
+    ANTHYWL_MOD5 = 1 << ANTHYWL_MOD5_INDEX,
+};
+
+enum anthywl_action {
+    ANTHYWL_ACTION_INVALID,
+    ANTHYWL_ACTION_ENABLE,
+    ANTHYWL_ACTION_DISABLE,
+    ANTHYWL_ACTION_TOGGLE,
+    ANTHYWL_ACTION_DELETE_LEFT,
+    ANTHYWL_ACTION_DELETE_RIGHT,
+    ANTHYWL_ACTION_MOVE_LEFT,
+    ANTHYWL_ACTION_MOVE_RIGHT,
+    ANTHYWL_ACTION_EXPAND_LEFT,
+    ANTHYWL_ACTION_EXPAND_RIGHT,
+    ANTHYWL_ACTION_SELECT,
+    ANTHYWL_ACTION_COMPOSE,
+    ANTHYWL_ACTION_ACCEPT,
+    ANTHYWL_ACTION_DISCARD,
+    ANTHYWL_ACTION_PREV_CANDIDATE,
+    ANTHYWL_ACTION_NEXT_CANDIDATE,
+    ANTHYWL_ACTION_CYCLE_CANDIDATE,
+    _ANTHYWL_ACTION_LAST,
+};
+
 struct anthywl_state {
     bool running;
     struct wl_display *wl_display;
@@ -56,6 +101,9 @@ struct anthywl_state {
     struct wl_list seats;
     struct wl_list outputs;
     struct wl_list timers;
+    struct wl_array global_bindings;
+    struct wl_array composing_bindings;
+    struct wl_array selecting_bindings;
     int max_scale;
 };
 
@@ -92,6 +140,10 @@ struct anthywl_seat {
     struct xkb_context *xkb_context;
     struct xkb_keymap *xkb_keymap;
     struct xkb_state *xkb_state;
+    xkb_mod_index_t mod_indices[ANTHYWL_MODIFIER_COUNT];
+    struct wl_array global_bindings;
+    struct wl_array composing_bindings;
+    struct wl_array selecting_bindings;
 
     // wl_seat
     char *name;
@@ -137,6 +189,79 @@ struct anthywl_seat {
     struct wl_surface *wl_surface;
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2;
 };
+
+struct anthywl_binding {
+    xkb_keysym_t keysym;
+    enum anthywl_modifier modifiers;
+    enum anthywl_action action;
+};
+
+struct anthywl_seat_binding {
+    xkb_keycode_t keycode;
+    xkb_mod_mask_t mod_mask;
+    enum anthywl_action action;
+};
+
+static char const default_config[] =
+    "global-bindings {\n"
+    "    Ctrl+Shift+Backspace toggle\n"
+    "}\n\n"
+    "composing-bindings {\n"
+    "    space select\n"
+    "    Return accept\n"
+    "    Escape discard\n"
+    "    Backspace delete-left\n"
+    "    Left move-left\n"
+    "    Left move-right\n"
+    "}\n\n"
+    "selecting-bindings {\n"
+    "    Escape discard\n"
+    "    Return accept\n"
+    "    BackSpace delete-left\n"
+    "    Left move-left\n"
+    "    Right move-right\n"
+    "    Shift+Left expand-left\n"
+    "    Shift+Right expand-right\n"
+    "    Up prev-candidate\n"
+    "    Down next-candidate\n"
+    "    space cycle-candidate\n"
+    "}\n";
+
+static enum anthywl_action anthywl_action_from_string(const char *name) {
+    if (strcmp(name, "enable") == 0)
+        return ANTHYWL_ACTION_ENABLE;
+    if (strcmp(name, "disable") == 0)
+        return ANTHYWL_ACTION_DISABLE;
+    if (strcmp(name, "toggle") == 0)
+        return ANTHYWL_ACTION_TOGGLE;
+    if (strcmp(name, "delete-left") == 0)
+        return ANTHYWL_ACTION_DELETE_LEFT;
+    if (strcmp(name, "delete-right") == 0)
+        return ANTHYWL_ACTION_DELETE_RIGHT;
+    if (strcmp(name, "move-left") == 0)
+        return ANTHYWL_ACTION_MOVE_LEFT;
+    if (strcmp(name, "move-right") == 0)
+        return ANTHYWL_ACTION_MOVE_RIGHT;
+    if (strcmp(name, "expand-left") == 0)
+        return ANTHYWL_ACTION_EXPAND_LEFT;
+    if (strcmp(name, "expand-right") == 0)
+        return ANTHYWL_ACTION_EXPAND_RIGHT;
+    if (strcmp(name, "select") == 0)
+        return ANTHYWL_ACTION_SELECT;
+    if (strcmp(name, "compose") == 0)
+        return ANTHYWL_ACTION_COMPOSE;
+    if (strcmp(name, "accept") == 0)
+        return ANTHYWL_ACTION_ACCEPT;
+    if (strcmp(name, "discard") == 0)
+        return ANTHYWL_ACTION_DISCARD;
+    if (strcmp(name, "prev-candidate") == 0)
+        return ANTHYWL_ACTION_PREV_CANDIDATE;
+    if (strcmp(name, "next-candidate") == 0)
+        return ANTHYWL_ACTION_NEXT_CANDIDATE;
+    if (strcmp(name, "cycle-candidate") == 0)
+        return ANTHYWL_ACTION_CYCLE_CANDIDATE;
+    return ANTHYWL_ACTION_INVALID;
+}
 
 static void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
@@ -504,99 +629,6 @@ static void anthywl_seat_composing_commit(struct anthywl_seat *seat) {
     anthywl_seat_draw_popup(seat);
 }
 
-static void anthywl_seat_selecting_update(struct anthywl_seat *seat);
-
-static bool anthywl_seat_composing_handle_key_event(
-    struct anthywl_seat *seat, xkb_keycode_t keycode)
-{
-    xkb_keysym_t keysym = xkb_state_key_get_one_sym(seat->xkb_state, keycode);
-    bool ctrl_active = xkb_state_mod_name_is_active(
-        seat->xkb_state, XKB_MOD_NAME_CTRL, XKB_STATE_EFFECTIVE);
-
-    switch (keysym) {
-    case XKB_KEY_Henkan_Mode:
-        if (!ctrl_active)
-            return false;
-        seat->is_composing_popup_visible = true;
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_Muhenkan:
-        seat->is_composing = false;
-        seat->is_composing_popup_visible = false;
-        anthywl_buffer_clear(&seat->buffer);
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_Escape:
-        if (seat->buffer.len == 0)
-            return false;
-        anthywl_buffer_clear(&seat->buffer);
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_BackSpace:
-        if (seat->buffer.len == 0)
-            return false;
-        anthywl_buffer_delete_backwards(&seat->buffer, 1);
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_Delete:
-        if (seat->buffer.len == 0)
-            return false;
-        anthywl_buffer_delete_forwards(&seat->buffer, 1);
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_Left:
-        if (seat->buffer.len == 0)
-            return false;
-        anthywl_buffer_move_left(&seat->buffer);
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_Right:
-        if (seat->buffer.len == 0)
-            return false;
-        anthywl_buffer_move_right(&seat->buffer);
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_space:
-        if (seat->buffer.len == 0)
-            return false;
-        anthywl_buffer_convert_trailing_n(&seat->buffer);
-        seat->is_selecting = true;
-        seat->is_selecting_popup_visible = seat->is_composing_popup_visible;
-        anthy_reset_context(seat->anthy_context);
-        anthy_set_string(seat->anthy_context, seat->buffer.text);
-        struct anthy_conv_stat conv_stat;
-        anthy_get_stat(seat->anthy_context, &conv_stat);
-        free(seat->selected_candidates);
-        seat->selected_candidates = calloc(conv_stat.nr_segment, sizeof(int));
-        seat->segment_count = conv_stat.nr_segment;
-        seat->current_segment = 0;
-        anthywl_seat_selecting_update(seat);
-        return true;
-    case XKB_KEY_Return:
-        if (seat->buffer.len == 0)
-            return false;
-        anthywl_seat_composing_commit(seat);
-        return true;
-    }
-
-    uint32_t codepoint = xkb_state_key_get_utf32(seat->xkb_state, keycode);
-    if (codepoint != 0 && codepoint < 32)
-        return false;
-
-    int utf8_len = xkb_state_key_get_utf8(seat->xkb_state, keycode, NULL, 0);
-    if (utf8_len == 0)
-        return false;
-
-    char *utf8 = malloc(utf8_len + 1);
-    xkb_state_key_get_utf8(seat->xkb_state, keycode, utf8, utf8_len + 1);
-    anthywl_buffer_append(&seat->buffer, utf8);
-    anthywl_buffer_convert_romaji(&seat->buffer);
-    anthywl_seat_composing_update(seat);
-    free(utf8);
-
-    return true;
-}
-
 static void anthywl_seat_selecting_update(struct anthywl_seat *seat) {
     size_t cursor_begin = 0, cursor_end = 0;
     struct wl_array buffer;
@@ -660,34 +692,217 @@ static void anthywl_seat_selecting_commit(struct anthywl_seat *seat) {
     wl_array_release(&buffer);
 }
 
-static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
-    xkb_keycode_t keycode);
+static int anthywl_binding_compare(void const *_a, void const *_b) {
+    const struct anthywl_binding *a = _a;
+    const struct anthywl_binding *b = _b;
+    int keysym = a->keysym - b->keysym;
+    if (keysym != 0)
+        return keysym;
+    int modifiers = a->modifiers - b->modifiers;
+    if (modifiers != 0)
+        return modifiers;
+    return a->action - b->action;
+}
 
-static bool anthywl_seat_selecting_handle_key_event(
-    struct anthywl_seat *seat, xkb_keycode_t keycode)
+static int anthywl_seat_binding_compare(void const *_a, void const *_b) {
+    const struct anthywl_seat_binding *a = _a;
+    const struct anthywl_seat_binding *b = _b;
+    int keycode = a->keycode - b->keycode;
+    if (keycode != 0)
+        return keycode;
+    int mod_mask = a->mod_mask - b->mod_mask;
+    if (mod_mask != 0)
+        return mod_mask;
+    return a->action - b->action;
+}
+
+static int anthywl_seat_binding_compare_without_action(
+    void const *_a, void const *_b)
 {
-    xkb_keysym_t keysym = xkb_state_key_get_one_sym(seat->xkb_state, keycode);
-    if (xkb_state_mod_name_is_active(
-        seat->xkb_state, XKB_MOD_NAME_SHIFT, XKB_STATE_EFFECTIVE))
-    {
-        if (keysym == XKB_KEY_Left || keysym == XKB_KEY_Right) {
-            int amount = keysym == XKB_KEY_Left ? -1 : 1;
-            anthy_resize_segment(
-                seat->anthy_context, seat->current_segment, amount);
-            struct anthy_conv_stat conv_stat;
-            anthy_get_stat(seat->anthy_context, &conv_stat);
-            seat->selected_candidates = realloc(
-                seat->selected_candidates, conv_stat.nr_segment * sizeof(int));
-            int difference = conv_stat.nr_segment - seat->segment_count;
-            if (difference > 0) {
-                memset(seat->selected_candidates + seat->segment_count,
-                    0, difference * sizeof(int));
-            }
-            seat->segment_count = conv_stat.nr_segment;
-            anthywl_seat_selecting_update(seat);
-            return true;
-        }
+    const struct anthywl_seat_binding *a = _a;
+    const struct anthywl_seat_binding *b = _b;
+    int keycode = a->keycode - b->keycode;
+    if (keycode != 0)
+        return keycode;
+    return a->mod_mask - b->mod_mask;
+}
+
+
+static bool anthywl_seat_handle_enable(struct anthywl_seat *seat) {
+    seat->is_composing = true;
+    return true;
+}
+
+static bool anthywl_seat_handle_disable(struct anthywl_seat *seat) {
+    seat->is_composing = false;
+    seat->is_selecting_popup_visible = false;
+    anthywl_buffer_clear(&seat->buffer);
+    anthywl_seat_composing_update(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_toggle(struct anthywl_seat *seat) {
+    if (seat->is_composing)
+        return anthywl_seat_handle_disable(seat);
+    else
+        return anthywl_seat_handle_enable(seat);
+}
+
+static bool anthywl_seat_handle_delete_left(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return true;
+    if (seat->buffer.len == 0)
+        return true;
+    if (seat->is_selecting) {
+        seat->is_selecting = false;
+        seat->is_selecting_popup_visible = false;
     }
+    anthywl_buffer_delete_backwards(&seat->buffer, 1);
+    anthywl_seat_composing_update(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_delete_right(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return true;
+    if (seat->buffer.len == 0)
+        return true;
+    if (seat->is_selecting) {
+        seat->is_selecting = false;
+        seat->is_selecting_popup_visible = false;
+    }
+    anthywl_buffer_delete_forwards(&seat->buffer, 1);
+    anthywl_seat_composing_update(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_move_left(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return true;
+    if (seat->buffer.len == 0)
+        return true;
+    if (seat->is_selecting) {
+        anthy_commit_segment(
+            seat->anthy_context,
+            seat->current_segment,
+            seat->selected_candidates[seat->current_segment]);
+        if (seat->current_segment != 0)
+            seat->current_segment -= 1;
+        anthywl_seat_selecting_update(seat);
+        return true;
+    }
+    anthywl_buffer_move_left(&seat->buffer);
+    anthywl_seat_composing_update(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_move_right(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return true;
+    if (seat->buffer.len == 0)
+        return true;
+    if (seat->is_selecting) {
+        anthy_commit_segment(
+            seat->anthy_context,
+            seat->current_segment,
+            seat->selected_candidates[seat->current_segment]);
+        if (seat->current_segment != seat->segment_count - 1)
+            seat->current_segment += 1;
+        anthywl_seat_selecting_update(seat);
+        return true;
+    }
+    anthywl_buffer_move_right(&seat->buffer);
+    anthywl_seat_composing_update(seat);
+    return true;
+}
+
+static void anthywl_seat_expand(struct anthywl_seat *seat, int amount) {
+    anthy_resize_segment(
+        seat->anthy_context, seat->current_segment, amount);
+    struct anthy_conv_stat conv_stat;
+    anthy_get_stat(seat->anthy_context, &conv_stat);
+    seat->selected_candidates = realloc(
+        seat->selected_candidates, conv_stat.nr_segment * sizeof(int));
+    int difference = conv_stat.nr_segment - seat->segment_count;
+    if (difference > 0) {
+        memset(seat->selected_candidates + seat->segment_count,
+            0, difference * sizeof(int));
+    }
+    seat->segment_count = conv_stat.nr_segment;
+    anthywl_seat_selecting_update(seat);
+}
+
+static bool anthywl_seat_handle_expand_left(struct anthywl_seat *seat) {
+    if (!seat->is_selecting)
+        return true;
+    anthywl_seat_expand(seat, -1);
+    return true;
+}
+
+static bool anthywl_seat_handle_expand_right(struct anthywl_seat *seat) {
+    if (!seat->is_selecting)
+        return true;
+    anthywl_seat_expand(seat, 1);
+    return true;
+}
+
+static bool anthywl_seat_handle_select(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return true;
+    if (seat->is_selecting)
+        return true;
+    if (seat->buffer.len == 0)
+        return true;
+    anthywl_buffer_convert_trailing_n(&seat->buffer);
+    seat->is_selecting = true;
+    seat->is_selecting_popup_visible = seat->is_composing_popup_visible;
+    anthy_reset_context(seat->anthy_context);
+    anthy_set_string(seat->anthy_context, seat->buffer.text);
+    struct anthy_conv_stat conv_stat;
+    anthy_get_stat(seat->anthy_context, &conv_stat);
+    free(seat->selected_candidates);
+    seat->selected_candidates = calloc(conv_stat.nr_segment, sizeof(int));
+    seat->segment_count = conv_stat.nr_segment;
+    seat->current_segment = 0;
+    anthywl_seat_selecting_update(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_compose(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return anthywl_seat_handle_enable(seat);
+    if (!seat->is_selecting)
+        return true;
+    seat->is_selecting = false;
+    anthywl_seat_composing_update(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_accept(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return true;
+    if (seat->buffer.len == 0)
+        return true;
+    if (seat->is_selecting)
+        anthywl_seat_selecting_commit(seat);
+    else
+        anthywl_seat_composing_commit(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_discard(struct anthywl_seat *seat) {
+    if (!seat->is_composing)
+        return true;
+    if (seat->is_selecting)
+        seat->is_selecting = false;
+    anthywl_buffer_clear(&seat->buffer);
+    anthywl_seat_composing_commit(seat);
+    return true;
+}
+
+static bool anthywl_seat_handle_prev_candidate(struct anthywl_seat *seat) {
+    if (!seat->is_selecting)
+        return true;
 
     struct anthy_conv_stat conv_stat;
     anthy_get_stat(seat->anthy_context, &conv_stat);
@@ -697,106 +912,177 @@ static bool anthywl_seat_selecting_handle_key_event(
     anthy_get_segment_stat(
         seat->anthy_context, seat->current_segment, &segment_stat);
 
-    if (keysym >= XKB_KEY_1 && keysym <= XKB_KEY_9) {
-        int selected_candidate =
-            seat->selected_candidates[seat->current_segment];
-        int candidate_offset = selected_candidate / 5 * 5;
-        int n = keysym - XKB_KEY_1;
-        if (n + candidate_offset < segment_stat.nr_candidate - 1) {
-            seat->selected_candidates[seat->current_segment] =
-                candidate_offset + n;
-        }
-        seat->is_selecting_popup_visible = true;
-        anthywl_seat_selecting_update(seat);
-        return true;
-    }
+    if (seat->selected_candidates[seat->current_segment] != 0)
+        seat->selected_candidates[seat->current_segment] -= 1;
+    seat->is_selecting_popup_visible = true;
+    anthywl_seat_selecting_update(seat);
 
-    switch (keysym) {
-    case XKB_KEY_Shift_L:
-    case XKB_KEY_Shift_R:
-    case XKB_KEY_Control_L:
-    case XKB_KEY_Control_R:
-    case XKB_KEY_Alt_L:
-    case XKB_KEY_Alt_R:
+    return true;
+}
+
+
+static bool anthywl_seat_handle_next_candidate(struct anthywl_seat *seat) {
+    if (!seat->is_selecting)
         return true;
-    case XKB_KEY_F6:
-    case XKB_KEY_F7:
-    case XKB_KEY_F8:
-    case XKB_KEY_F9:
-    case XKB_KEY_F10:
-        return true;
-    case XKB_KEY_space:
-        if (seat->selected_candidates[seat->current_segment]
-            != segment_stat.nr_candidate - 1)
-        {
-            seat->selected_candidates[seat->current_segment] += 1;
-        }
-        seat->is_selecting_popup_visible = true;
-        anthywl_seat_selecting_update(seat);
-        return true;
-    case XKB_KEY_Escape:
-    case XKB_KEY_BackSpace:
-        seat->is_selecting = false;
-        seat->is_selecting_popup_visible = true;
-        anthywl_seat_composing_update(seat);
-        return true;
-    case XKB_KEY_Return:
-        anthywl_seat_selecting_commit(seat);
-        return true;
-    case XKB_KEY_Left:
-        anthy_commit_segment(
-            seat->anthy_context,
-            seat->current_segment,
-            seat->selected_candidates[seat->current_segment]);
-        if (seat->current_segment != 0)
-            seat->current_segment -= 1;
-        anthywl_seat_selecting_update(seat);
-        return true;
-    case XKB_KEY_Right:
-        anthy_commit_segment(
-            seat->anthy_context,
-            seat->current_segment,
-            seat->selected_candidates[seat->current_segment]);
-        if (seat->current_segment != seat->segment_count - 1)
-            seat->current_segment += 1;
-        anthywl_seat_selecting_update(seat);
-        return true;
-    case XKB_KEY_Up:
-        if (seat->selected_candidates[seat->current_segment] != 0)
-            seat->selected_candidates[seat->current_segment] -= 1;
-        seat->is_selecting_popup_visible = true;
-        anthywl_seat_selecting_update(seat);
-        return true;
-    case XKB_KEY_Down:
-        if (seat->selected_candidates[seat->current_segment]
-            != segment_stat.nr_candidate - 1)
-        {
-            seat->selected_candidates[seat->current_segment] += 1;
-        }
-        seat->is_selecting_popup_visible = true;
-        anthywl_seat_selecting_update(seat);
-        return true;
-    default:
-        anthywl_seat_selecting_commit(seat);
-        return anthywl_seat_handle_key(seat, keycode);
+
+    struct anthy_conv_stat conv_stat;
+    anthy_get_stat(seat->anthy_context, &conv_stat);
+    assert(conv_stat.nr_segment == seat->segment_count);
+
+    struct anthy_segment_stat segment_stat;
+    anthy_get_segment_stat(
+        seat->anthy_context, seat->current_segment, &segment_stat);
+
+    if (seat->selected_candidates[seat->current_segment]
+        != segment_stat.nr_candidate - 1)
+    {
+        seat->selected_candidates[seat->current_segment] += 1;
     }
+    seat->is_selecting_popup_visible = true;
+    anthywl_seat_selecting_update(seat);
+
+    return true;
+}
+
+static bool anthywl_seat_handle_cycle_candidate(struct anthywl_seat *seat) {
+    if (!seat->is_selecting)
+        return true;
+
+    struct anthy_conv_stat conv_stat;
+    anthy_get_stat(seat->anthy_context, &conv_stat);
+    assert(conv_stat.nr_segment == seat->segment_count);
+
+    struct anthy_segment_stat segment_stat;
+    anthy_get_segment_stat(
+        seat->anthy_context, seat->current_segment, &segment_stat);
+
+    if (seat->selected_candidates[seat->current_segment]
+        != segment_stat.nr_candidate - 1)
+    {
+        seat->selected_candidates[seat->current_segment] += 1;
+    }
+    seat->is_selecting_popup_visible = true;
+    anthywl_seat_selecting_update(seat);
+
+    return true;
+}
+
+static bool(*anthywl_seat_action_handlers[_ANTHYWL_ACTION_LAST])
+    (struct anthywl_seat *) =
+{
+    [ANTHYWL_ACTION_ENABLE] = anthywl_seat_handle_enable,
+    [ANTHYWL_ACTION_DISABLE] = anthywl_seat_handle_disable,
+    [ANTHYWL_ACTION_TOGGLE] = anthywl_seat_handle_toggle,
+    [ANTHYWL_ACTION_DELETE_LEFT] = anthywl_seat_handle_delete_left,
+    [ANTHYWL_ACTION_DELETE_RIGHT] = anthywl_seat_handle_delete_right,
+    [ANTHYWL_ACTION_MOVE_LEFT] = anthywl_seat_handle_move_left,
+    [ANTHYWL_ACTION_MOVE_RIGHT] = anthywl_seat_handle_move_right,
+    [ANTHYWL_ACTION_EXPAND_LEFT] = anthywl_seat_handle_expand_left,
+    [ANTHYWL_ACTION_EXPAND_RIGHT] = anthywl_seat_handle_expand_right,
+    [ANTHYWL_ACTION_SELECT] = anthywl_seat_handle_select,
+    [ANTHYWL_ACTION_COMPOSE] = anthywl_seat_handle_compose,
+    [ANTHYWL_ACTION_ACCEPT] = anthywl_seat_handle_accept,
+    [ANTHYWL_ACTION_DISCARD] = anthywl_seat_handle_discard,
+    [ANTHYWL_ACTION_PREV_CANDIDATE] = anthywl_seat_handle_prev_candidate,
+    [ANTHYWL_ACTION_NEXT_CANDIDATE] = anthywl_seat_handle_next_candidate,
+    [ANTHYWL_ACTION_CYCLE_CANDIDATE] = anthywl_seat_handle_cycle_candidate,
+};
+
+static bool anthywl_seat_handle_action(struct anthywl_seat *seat,
+    enum anthywl_action action)
+{
+    if (action <= ANTHYWL_ACTION_INVALID || action >= _ANTHYWL_ACTION_LAST)
+        return false;
+    bool (*handler)(struct anthywl_seat *)
+        = anthywl_seat_action_handlers[action];
+    if (!handler)
+        return false;
+    return handler(seat);
+}
+
+static bool anthywl_seat_handle_key_bindings(struct anthywl_seat *seat,
+    struct wl_array *bindings, struct anthywl_seat_binding *press)
+{
+    struct anthywl_seat_binding *found = bsearch(press, bindings->data,
+        bindings->size / sizeof(struct anthywl_seat_binding),
+        sizeof(struct anthywl_seat_binding),
+        anthywl_seat_binding_compare_without_action);
+    if (found == NULL)
+        return false;
+    return anthywl_seat_handle_action(seat, found->action);
 }
 
 static bool anthywl_seat_handle_key(struct anthywl_seat *seat,
     xkb_keycode_t keycode)
 {
     xkb_keysym_t keysym = xkb_state_key_get_one_sym(seat->xkb_state, keycode);
-    if (seat->is_selecting)
-        return anthywl_seat_selecting_handle_key_event(seat, keycode);
-    if (seat->is_composing)
-        return anthywl_seat_composing_handle_key_event(seat, keycode);
-    if (keysym == XKB_KEY_Henkan_Mode) {
-        seat->is_composing = true;
-        seat->is_composing_popup_visible =
-            xkb_state_mod_name_is_active(
-                seat->xkb_state, XKB_MOD_NAME_CTRL, XKB_STATE_EFFECTIVE);
+    struct anthywl_seat_binding press = {
+        .keycode = keycode,
+        .mod_mask = 0,
+        .action = 0,
+    };
+    xkb_mod_mask_t mod_count = xkb_keymap_num_mods(seat->xkb_keymap);
+    for (xkb_mod_index_t i = 0; i < mod_count; i++) {
+        bool is_active = xkb_state_mod_index_is_active(seat->xkb_state,
+            i, XKB_STATE_MODS_EFFECTIVE);
+        bool is_consumed = xkb_state_mod_index_is_consumed(seat->xkb_state,
+            keycode, i);
+        bool is_relevant = (i != seat->mod_indices[ANTHYWL_CAPS_INDEX])
+            && (i != seat->mod_indices[ANTHYWL_NUM_INDEX]);
+        (void)is_consumed;
+        if (is_active && is_relevant)
+            press.mod_mask |= 1 << i;
+    }
+handle:
+    if (seat->is_selecting && anthywl_seat_handle_key_bindings(
+        seat, &seat->selecting_bindings, &press))
+    {
         return true;
     }
+    if (seat->is_composing && seat->buffer.len != 0
+        && anthywl_seat_handle_key_bindings(
+        seat, &seat->composing_bindings, &press))
+    {
+        return true;
+    }
+    if (anthywl_seat_handle_key_bindings(
+        seat, &seat->global_bindings, &press))
+    {
+        return true;
+    }
+    if (keysym == XKB_KEY_Shift_L
+        || keysym == XKB_KEY_Shift_R
+        || keysym == XKB_KEY_Control_L
+        || keysym == XKB_KEY_Control_R
+        || keysym == XKB_KEY_Alt_L
+        || keysym == XKB_KEY_Alt_R
+        || keysym == XKB_KEY_Super_L
+        || keysym == XKB_KEY_Super_R
+        || keysym == XKB_KEY_Hyper_L
+        || keysym == XKB_KEY_Hyper_R)
+    {
+        return false;
+    }
+    if (seat->is_selecting) {
+        anthywl_seat_selecting_commit(seat);
+        goto handle;
+    }
+    if (seat->is_composing) {
+        uint32_t codepoint = xkb_state_key_get_utf32(seat->xkb_state, keycode);
+        if (codepoint != 0 && codepoint < 32)
+            return false;
+        int utf8_len = xkb_state_key_get_utf8(seat->xkb_state, keycode, NULL, 0);
+        if (utf8_len == 0)
+            return false;
+        char *utf8 = malloc(utf8_len + 1);
+        xkb_state_key_get_utf8(seat->xkb_state, keycode, utf8, utf8_len + 1);
+        anthywl_buffer_append(&seat->buffer, utf8);
+        anthywl_buffer_convert_romaji(&seat->buffer);
+        anthywl_seat_composing_update(seat);
+        free(utf8);
+        return true;
+    }
+
     return false;
 }
 
@@ -823,6 +1109,61 @@ static void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
     }
 }
 
+struct keycode_matches {
+    struct anthywl_seat *seat;
+    xkb_keysym_t keysym;
+    struct wl_array keycodes;
+};
+
+static void find_keycode(struct xkb_keymap *keymap, xkb_keycode_t keycode,
+    void *data)
+{
+    struct keycode_matches *matches = data;
+    xkb_keysym_t keysym = xkb_state_key_get_one_sym(
+		matches->seat->xkb_state, keycode);
+    if (keysym == XKB_KEY_NoSymbol)
+        return;
+    if (matches->keysym == keysym) {
+        xkb_keycode_t *keycode_spot =
+            wl_array_add(&matches->keycodes, sizeof(xkb_keycode_t));
+        *keycode_spot = keycode;
+    }
+}
+
+static void anthywl_seat_setup_bindings(struct anthywl_seat *seat,
+    struct wl_array *state_bindings, struct wl_array *seat_bindings)
+{
+    struct anthywl_binding *state_binding;
+    struct keycode_matches matches = {
+        .seat = seat,
+    };
+    wl_array_init(&matches.keycodes);
+    wl_array_for_each(state_binding, state_bindings) {
+        matches.keysym = state_binding->keysym;
+        matches.keycodes.size = 0;
+        xkb_keymap_key_for_each(seat->xkb_keymap, find_keycode, &matches);
+        assert(matches.keycodes.size);
+        xkb_mod_mask_t mod_mask = 0;
+        for (int i = 0; i < ANTHYWL_MODIFIER_COUNT; i++) {
+            if (state_binding->modifiers & (1 << i)) {
+                mod_mask |= 1 << seat->mod_indices[i];
+            }
+        }
+        xkb_keycode_t *keycode;
+        wl_array_for_each(keycode, &matches.keycodes) {
+            struct anthywl_seat_binding *seat_binding = wl_array_add(
+                seat_bindings, sizeof(struct anthywl_seat_binding));
+            seat_binding->keycode = *keycode;
+            seat_binding->mod_mask = mod_mask;
+            seat_binding->action = state_binding->action;
+        }
+    }
+    qsort(seat_bindings->data,
+        seat_bindings->size / sizeof(struct anthywl_seat_binding),
+        sizeof(struct anthywl_seat_binding), anthywl_seat_binding_compare);
+    wl_array_release(&matches.keycodes);
+}
+
 static void zwp_input_method_keyboard_grab_v2_keymap(void *data,
     struct zwp_input_method_keyboard_grab_v2 *zwp_input_method_keyboard_grab_v2,
     uint32_t format, int32_t fd, uint32_t size)
@@ -838,9 +1179,31 @@ static void zwp_input_method_keyboard_grab_v2_keymap(void *data,
         xkb_state_unref(seat->xkb_state);
         seat->xkb_keymap = xkb_keymap_new_from_string(seat->xkb_context, map,
             XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
+        seat->mod_indices[ANTHYWL_SHIFT_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, XKB_MOD_NAME_SHIFT);
+        seat->mod_indices[ANTHYWL_CAPS_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, XKB_MOD_NAME_CAPS);
+        seat->mod_indices[ANTHYWL_CTRL_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, XKB_MOD_NAME_CTRL);
+        seat->mod_indices[ANTHYWL_ALT_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, XKB_MOD_NAME_ALT);
+        seat->mod_indices[ANTHYWL_NUM_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, XKB_MOD_NAME_ALT);
+        seat->mod_indices[ANTHYWL_MOD3_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, "Mod3");
+        seat->mod_indices[ANTHYWL_LOGO_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, XKB_MOD_NAME_LOGO);
+        seat->mod_indices[ANTHYWL_MOD5_INDEX] = xkb_keymap_mod_get_index(
+            seat->xkb_keymap, "Mod5");
         seat->xkb_state = xkb_state_new(seat->xkb_keymap);
         free(seat->xkb_keymap_string);
         seat->xkb_keymap_string = strdup(map);
+        anthywl_seat_setup_bindings(
+            seat, &seat->state->global_bindings, &seat->global_bindings);
+        anthywl_seat_setup_bindings(
+            seat, &seat->state->selecting_bindings, &seat->selecting_bindings);
+        anthywl_seat_setup_bindings(
+            seat, &seat->state->composing_bindings, &seat->composing_bindings);
     }
     close(fd);
     munmap(map, size);
@@ -887,7 +1250,7 @@ static void zwp_input_method_keyboard_grab_v2_key(void *data,
         handled |= anthywl_seat_handle_key(seat, keycode);
 
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED
-        && xkb_key_repeats(seat->xkb_keymap, keycode)
+        && xkb_keymap_key_repeats(seat->xkb_keymap, keycode)
         && handled)
     {
         seat->repeating_keycode = keycode;
@@ -1025,7 +1388,6 @@ static void zwp_input_method_v2_done(
     if (!was_active && seat->active) {
         seat->is_selecting = false;
         seat->is_composing_popup_visible = false;
-        seat->is_selecting_popup_visible = false;
         anthywl_buffer_clear(&seat->buffer);
         anthywl_seat_draw_popup(seat);
     }
@@ -1247,7 +1609,7 @@ struct anthywl_global {
     };
 };
 
-static int anthywl_global_compare(const void *a, const void *b) {
+static int anthywl_global_compare(void const *a, void const *b) {
     return strcmp(
         ((struct anthywl_global const *)a)->name,
         ((struct anthywl_global const *)b)->name);
@@ -1348,12 +1710,113 @@ static void anthywl_reload_cursor_theme(struct anthywl_state *state) {
     state->wl_cursor_theme_scale = state->max_scale;
 }
 
+
+static void anthywl_state_load_config_bindings(struct anthywl_state *state,
+    struct scfg_block *block, struct wl_array *bindings)
+{
+    for (size_t i = 0; i < block->directives_len; i++) {
+        struct scfg_directive *directive = &block->directives[i];
+        char *s = directive->name, *p;
+        struct anthywl_binding binding = { 0 };
+        while ((p = strchr(s, '+'))) {
+            *p = 0;
+            if (strcmp(s, "Shift") == 0)
+                binding.modifiers |= ANTHYWL_SHIFT;
+            else if (strcmp(s, "Lock") == 0)
+                binding.modifiers |= ANTHYWL_CAPS;
+            else if (strcmp(s, "Ctrl") == 0 || strcmp(s, "Control") == 0)
+                binding.modifiers |= ANTHYWL_CTRL;
+            else if (strcmp(s, "Mod1") == 0 || strcmp(s, "Alt") == 0)
+                binding.modifiers |= ANTHYWL_ALT;
+            else if (strcmp(s, "Mod2") == 0)
+                binding.modifiers |= ANTHYWL_NUM;
+            else if (strcmp(s, "Mod3") == 0)
+                binding.modifiers |= ANTHYWL_MOD3;
+            else if (strcmp(s, "Mod4") == 0)
+                binding.modifiers |= ANTHYWL_LOGO;
+            else if (strcmp(s, "Mod5") == 0)
+                binding.modifiers |= ANTHYWL_MOD5;
+            else {
+                fprintf(stderr, "invalid modifier %s, binding ignored\n", s);
+                return;
+            }
+            s = p + 1;
+        }
+        binding.keysym = xkb_keysym_from_name(s,  XKB_KEYSYM_CASE_INSENSITIVE);
+        if (binding.keysym == XKB_KEY_NoSymbol) {
+            fprintf(stderr, "invalid key %s, binding ignored\n", s);
+            return;
+        }
+        binding.action = anthywl_action_from_string(directive->params[0]);
+        *(struct anthywl_binding *)wl_array_add(bindings, sizeof binding) =
+            binding;
+    }
+    qsort(bindings->data, bindings->size / sizeof(struct anthywl_binding),
+        sizeof(struct anthywl_binding), anthywl_binding_compare);
+}
+
+static void anthywl_state_load_config_root(struct anthywl_state *state,
+    struct scfg_block *root)
+{
+    for (size_t i = 0; i < root->directives_len; i++) {
+        struct scfg_directive *directive = &root->directives[i];
+        if (strcmp(directive->name, "global-bindings") == 0) {
+            anthywl_state_load_config_bindings(
+                state, &directive->children, &state->global_bindings);
+        } else if (strcmp(directive->name, "composing-bindings") == 0) {
+            anthywl_state_load_config_bindings(
+                state, &directive->children, &state->composing_bindings);
+        } else if (strcmp(directive->name, "selecting-bindings") == 0) {
+            anthywl_state_load_config_bindings(
+                state, &directive->children, &state->selecting_bindings);
+        } else {
+            fprintf(stderr, "unknown section '%s'\n", directive->name);
+        }
+    }
+}
+
+static bool anthywl_state_load_config(struct anthywl_state *state) {
+    char path[PATH_MAX];
+    char const *prefix;
+    if ((prefix = getenv("XDG_CONFIG_HOME"))) {
+        snprintf(path, sizeof path, "%s/anthywl/config", prefix);
+    } else if ((prefix = getenv("HOME"))) {
+        snprintf(path, sizeof path, "%s/.config/anthywl/config", prefix);
+    } else {
+        fprintf(stderr, "cannot find config file\n");
+        return false;
+    }
+
+    FILE *f = fopen(path, "r");
+    if (f == NULL)
+        f = fmemopen((char *)default_config, sizeof default_config, "r");
+
+    if (f == NULL) {
+        perror("failed to open default config file");
+        return false;
+    }
+    struct scfg_block root;
+    if (scfg_parse_file(&root, f))
+        goto close;
+    anthywl_state_load_config_root(state, &root);
+    scfg_block_finish(&root);
+close:
+    fclose(f);
+    return true;
+}
+
 static bool anthywl_state_init(struct anthywl_state *state) {
     wl_list_init(&state->buffers);
     wl_list_init(&state->seats);
     wl_list_init(&state->outputs);
     wl_list_init(&state->timers);
+    wl_array_init(&state->global_bindings);
+    wl_array_init(&state->composing_bindings);
+    wl_array_init(&state->selecting_bindings);
     state->max_scale = 1;
+
+    if (!anthywl_state_load_config(state))
+        return false;
  
     state->wl_display = wl_display_connect(NULL);
     if (state->wl_display == NULL) {

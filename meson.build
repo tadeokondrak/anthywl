@@ -26,6 +26,7 @@ anthy_dep = dependency('anthy')
 pango_dep = dependency('pango')
 cairo_dep = dependency('cairo')
 pangocairo_dep = dependency('pangocairo')
+scfg_dep = dependency('scfg')
 
 subdir('protocol')
 
@@ -43,5 +44,6 @@ anthywl_bin = executable(
         pango_dep,
         cairo_dep,
         pangocairo_dep,
+        scfg_dep,
     ],
 )

@@ -1,30 +1,37 @@
 anthywl
+
 Work-in-progress Japanese input method for sway
 
 Required patches for popup support:
-https://github.com/swaywm/wlroots/pull/2550 
 https://github.com/swaywm/sway/pull/5890
 
-Currently hard-coded key bindings:
+Default config:
 
-Ctrl+Henkan_Mode: Enable input method with always-on-popup
-Henkan_Mode: Enable input method
-Muhenkan: Disable input methbod
-
-Composing:
-Space: Enter selection mode
-Escape: Clear preedit
-Return: Commit preedit
-
-Selection:
-Any: Commit selection
-Up: Previous candidate
-Down: Next candidate
-Left: Previous segment
-Right: Next segment
-Shift-Left: Shrink segment
-Shift-Right: Enlarge segment
-Return: Commit selection
+```
+global-bindings {
+    Ctrl+Shift+Backspace toggle
+}
+composing-bindings {
+    space select
+    Return accept
+    Escape discard
+    Backspace delete-left
+    Left move-left
+    Left move-right
+}
+selecting-bindings {
+    Escape discard
+    Return accept
+    BackSpace delete-left
+    Left move-left
+    Right move-right
+    Shift+Left expand-left
+    Shift+Right expand-right
+    Up prev-candidate
+    Down next-candidate
+    space cycle-candidate
+}
+```
 
 Any feedback on how things should work is appreciated, open a GitHub
-issue or "discussion" if you have any.
+issue or discussion if you have any.
