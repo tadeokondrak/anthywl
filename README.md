@@ -2,7 +2,7 @@ anthywl
 
 Work-in-progress Japanese input method for sway
 
-Required patches for popup support:
+Required patch for popup support:
 https://github.com/swaywm/sway/pull/5890
 
 Default config:
