@@ -8,6 +8,7 @@ https://github.com/swaywm/sway/pull/5890
 Default config:
 
 ```
+active-at-startup
 global-bindings {
     Ctrl+Shift+Backspace toggle
 }

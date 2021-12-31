@@ -101,6 +101,7 @@ struct anthywl_state {
     struct wl_list seats;
     struct wl_list outputs;
     struct wl_list timers;
+    bool active_at_startup;
     struct wl_array global_bindings;
     struct wl_array composing_bindings;
     struct wl_array selecting_bindings;
@@ -203,6 +204,7 @@ struct anthywl_seat_binding {
 };
 
 static char const default_config[] =
+    "active-at-startup\n"
     "global-bindings {\n"
     "    Ctrl+Shift+Backspace toggle\n"
     "}\n\n"
@@ -505,7 +507,7 @@ static void anthywl_seat_init(struct anthywl_seat *seat,
     seat->anthy_context = anthy_create_context();
     anthy_context_set_encoding(seat->anthy_context, ANTHY_UTF8_ENCODING);
     seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
-    seat->is_composing = true;
+    seat->is_composing = state->active_at_startup;
 }
 
 static struct zwp_input_method_v2_listener const zwp_input_method_v2_listener;
@@ -1760,7 +1762,14 @@ static void anthywl_state_load_config_root(struct anthywl_state *state,
 {
     for (size_t i = 0; i < root->directives_len; i++) {
         struct scfg_directive *directive = &root->directives[i];
-        if (strcmp(directive->name, "global-bindings") == 0) {
+        if (strcmp(directive->name, "active-at-startup") == 0) {
+            if (directive->params_len != 0)
+                fprintf(stderr,
+                    "line %d: too many arguments to active-at-startup\n",
+                    directive->lineno);
+            else
+                state->active_at_startup = true;
+        } else if (strcmp(directive->name, "global-bindings") == 0) {
             anthywl_state_load_config_bindings(
                 state, &directive->children, &state->global_bindings);
         } else if (strcmp(directive->name, "composing-bindings") == 0) {
