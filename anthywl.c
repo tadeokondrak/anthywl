@@ -1718,6 +1718,12 @@ static void anthywl_state_load_config_bindings(struct anthywl_state *state,
 {
     for (size_t i = 0; i < block->directives_len; i++) {
         struct scfg_directive *directive = &block->directives[i];
+        if (directive->params_len != 1) {
+            fprintf(stderr, "line %d: invalid number of parameters "
+                "for bindings directive, ignoring\n", directive->lineno);
+            return;
+        }
+
         char *s = directive->name, *p;
         struct anthywl_binding binding = { 0 };
         while ((p = strchr(s, '+'))) {
@@ -1739,15 +1745,18 @@ static void anthywl_state_load_config_bindings(struct anthywl_state *state,
             else if (strcmp(s, "Mod5") == 0)
                 binding.modifiers |= ANTHYWL_MOD5;
             else {
-                fprintf(stderr, "invalid modifier %s, binding ignored\n", s);
+                fprintf(stderr,
+                    "line %d: invalid modifier %s, binding ignored\n",
+                    directive->lineno, s);
                 return;
             }
             s = p + 1;
         }
         binding.keysym = xkb_keysym_from_name(s,  XKB_KEYSYM_CASE_INSENSITIVE);
         if (binding.keysym == XKB_KEY_NoSymbol) {
-            fprintf(stderr, "invalid key %s, binding ignored\n", s);
-            return;
+            fprintf(stderr, "line %d: invalid key %s, binding ignored\n",
+                directive->lineno, s);
+            continue;
         }
         binding.action = anthywl_action_from_string(directive->params[0]);
         *(struct anthywl_binding *)wl_array_add(bindings, sizeof binding) =
@@ -1779,7 +1788,8 @@ static void anthywl_state_load_config_root(struct anthywl_state *state,
             anthywl_state_load_config_bindings(
                 state, &directive->children, &state->selecting_bindings);
         } else {
-            fprintf(stderr, "unknown section '%s'\n", directive->name);
+            fprintf(stderr, "line %d: unknown section '%s'\n",
+                directive->lineno, directive->name);
         }
     }
 }
