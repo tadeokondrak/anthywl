@@ -162,7 +162,7 @@ struct anthywl_seat {
     uint32_t pending_content_type_purpose, content_type_purpose;
     uint32_t done_events_received;
 
-    // zwp_input_method_keyboard_grab_v2 
+    // zwp_input_method_keyboard_grab_v2
     uint32_t repeat_rate;
     uint32_t repeat_delay;
     xkb_keycode_t pressed[64];
@@ -177,7 +177,7 @@ struct anthywl_seat {
     bool is_composing;
     bool is_composing_popup_visible;
 
-    // selecting 
+    // selecting
     bool is_selecting;
     bool is_selecting_popup_visible;
     int current_segment;
@@ -360,7 +360,7 @@ static struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
             char *markup_fragment;
             if (i == seat->current_segment)
                 markup_fragment = g_markup_printf_escaped("<b>%s</b>", buf);
-            else 
+            else
                 markup_fragment = g_markup_escape_text(buf, -1);
             g_string_append(markup, markup_fragment);
             g_free(markup_fragment);
@@ -1559,7 +1559,7 @@ static void wl_output_mode(void *data, struct wl_output *wl_output,
     uint32_t flags, int32_t width, int32_t height, int32_t refresh)
 {
 }
- 
+
 static void wl_output_done(void *data, struct wl_output *wl_output) {
     struct anthywl_output *output = data;
     output->scale = output->pending_scale;
@@ -1795,6 +1795,7 @@ static bool anthywl_state_load_config(struct anthywl_state *state) {
         perror("failed to open default config file");
         return false;
     }
+
     struct scfg_block root;
     if (scfg_parse_file(&root, f))
         goto close;
@@ -1817,7 +1818,7 @@ static bool anthywl_state_init(struct anthywl_state *state) {
 
     if (!anthywl_state_load_config(state))
         return false;
- 
+
     state->wl_display = wl_display_connect(NULL);
     if (state->wl_display == NULL) {
         perror("wl_display_connect");
