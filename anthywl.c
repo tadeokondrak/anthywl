@@ -44,34 +44,6 @@
         _a > _b ? _a : _b;      \
     })
 
-char const anthywl_default_config_data[] =
-    "active-at-startup\n"
-    "global-bindings {\n"
-    "    Ctrl+Shift+Backspace toggle\n"
-    "}\n\n"
-    "composing-bindings {\n"
-    "    space select\n"
-    "    Return accept\n"
-    "    Escape discard\n"
-    "    Backspace delete-left\n"
-    "    Left move-left\n"
-    "    Left move-right\n"
-    "}\n\n"
-    "selecting-bindings {\n"
-    "    Escape discard\n"
-    "    Return accept\n"
-    "    BackSpace delete-left\n"
-    "    Left move-left\n"
-    "    Right move-right\n"
-    "    Shift+Left expand-left\n"
-    "    Shift+Right expand-right\n"
-    "    Up prev-candidate\n"
-    "    Down next-candidate\n"
-    "    space cycle-candidate\n"
-    "}\n";
-
-size_t const anthywl_default_config_len = sizeof anthywl_default_config_data;
-char const *const anthywl_default_config = anthywl_default_config_data;
 
 void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
@@ -304,7 +276,7 @@ void anthywl_seat_init(struct anthywl_seat *seat,
     seat->anthy_context = anthy_create_context();
     anthy_context_set_encoding(seat->anthy_context, ANTHY_UTF8_ENCODING);
     seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
-    seat->is_composing = state->active_at_startup;
+    seat->is_composing = state->config.active_at_startup;
 }
 
 void wl_surface_enter(void *data, struct wl_surface *wl_surface,
@@ -482,7 +454,7 @@ void anthywl_seat_selecting_commit(struct anthywl_seat *seat) {
     wl_array_release(&buffer);
 }
 
-static int anthywl_binding_compare(void const *_a, void const *_b) {
+int anthywl_binding_compare(void const *_a, void const *_b) {
     const struct anthywl_binding *a = _a;
     const struct anthywl_binding *b = _b;
     int keysym = a->keysym - b->keysym;
@@ -494,7 +466,7 @@ static int anthywl_binding_compare(void const *_a, void const *_b) {
     return a->action - b->action;
 }
 
-static int anthywl_seat_binding_compare(void const *_a, void const *_b) {
+int anthywl_seat_binding_compare(void const *_a, void const *_b) {
     const struct anthywl_seat_binding *a = _a;
     const struct anthywl_seat_binding *b = _b;
     int keycode = a->keycode - b->keycode;
@@ -506,7 +478,7 @@ static int anthywl_seat_binding_compare(void const *_a, void const *_b) {
     return a->action - b->action;
 }
 
-static int anthywl_seat_binding_compare_without_action(
+int anthywl_seat_binding_compare_without_action(
     void const *_a, void const *_b)
 {
     const struct anthywl_seat_binding *a = _a;
@@ -518,7 +490,7 @@ static int anthywl_seat_binding_compare_without_action(
 }
 
 
-static bool anthywl_seat_handle_key_bindings(struct anthywl_seat *seat,
+bool anthywl_seat_handle_key_bindings(struct anthywl_seat *seat,
     struct wl_array *bindings, struct anthywl_seat_binding *press)
 {
     struct anthywl_seat_binding *found = bsearch(press, bindings->data,
@@ -716,12 +688,12 @@ void zwp_input_method_keyboard_grab_v2_keymap(void *data,
         seat->xkb_state = xkb_state_new(seat->xkb_keymap);
         free(seat->xkb_keymap_string);
         seat->xkb_keymap_string = strdup(map);
-        anthywl_seat_setup_bindings(
-            seat, &seat->state->global_bindings, &seat->global_bindings);
-        anthywl_seat_setup_bindings(
-            seat, &seat->state->selecting_bindings, &seat->selecting_bindings);
-        anthywl_seat_setup_bindings(
-            seat, &seat->state->composing_bindings, &seat->composing_bindings);
+        anthywl_seat_setup_bindings(seat,
+            &seat->state->config.global_bindings, &seat->global_bindings);
+        anthywl_seat_setup_bindings(seat,
+            &seat->state->config.selecting_bindings, &seat->selecting_bindings);
+        anthywl_seat_setup_bindings(seat,
+            &seat->state->config.composing_bindings, &seat->composing_bindings);
     }
     close(fd);
     munmap(map, size);
@@ -1176,131 +1148,15 @@ void anthywl_reload_cursor_theme(struct anthywl_state *state) {
     state->wl_cursor_theme_scale = state->max_scale;
 }
 
-
-static void anthywl_state_load_config_bindings(struct anthywl_state *state,
-    struct scfg_block *block, struct wl_array *bindings)
-{
-    for (size_t i = 0; i < block->directives_len; i++) {
-        struct scfg_directive *directive = &block->directives[i];
-        if (directive->params_len != 1) {
-            fprintf(stderr, "line %d: invalid number of parameters "
-                "for bindings directive, ignoring\n", directive->lineno);
-            return;
-        }
-
-        char *s = directive->name, *p;
-        struct anthywl_binding binding = { 0 };
-        while ((p = strchr(s, '+'))) {
-            *p = 0;
-            if (strcmp(s, "Shift") == 0)
-                binding.modifiers |= ANTHYWL_SHIFT;
-            else if (strcmp(s, "Lock") == 0)
-                binding.modifiers |= ANTHYWL_CAPS;
-            else if (strcmp(s, "Ctrl") == 0 || strcmp(s, "Control") == 0)
-                binding.modifiers |= ANTHYWL_CTRL;
-            else if (strcmp(s, "Mod1") == 0 || strcmp(s, "Alt") == 0)
-                binding.modifiers |= ANTHYWL_ALT;
-            else if (strcmp(s, "Mod2") == 0)
-                binding.modifiers |= ANTHYWL_NUM;
-            else if (strcmp(s, "Mod3") == 0)
-                binding.modifiers |= ANTHYWL_MOD3;
-            else if (strcmp(s, "Mod4") == 0)
-                binding.modifiers |= ANTHYWL_LOGO;
-            else if (strcmp(s, "Mod5") == 0)
-                binding.modifiers |= ANTHYWL_MOD5;
-            else {
-                fprintf(stderr,
-                    "line %d: invalid modifier %s, binding ignored\n",
-                    directive->lineno, s);
-                return;
-            }
-            s = p + 1;
-        }
-        binding.keysym = xkb_keysym_from_name(s,  XKB_KEYSYM_CASE_INSENSITIVE);
-        if (binding.keysym == XKB_KEY_NoSymbol) {
-            fprintf(stderr, "line %d: invalid key %s, binding ignored\n",
-                directive->lineno, s);
-            continue;
-        }
-        binding.action = anthywl_action_from_string(directive->params[0]);
-        *(struct anthywl_binding *)wl_array_add(bindings, sizeof binding) =
-            binding;
-    }
-    qsort(bindings->data, bindings->size / sizeof(struct anthywl_binding),
-        sizeof(struct anthywl_binding), anthywl_binding_compare);
-}
-
-static void anthywl_state_load_config_root(struct anthywl_state *state,
-    struct scfg_block *root)
-{
-    for (size_t i = 0; i < root->directives_len; i++) {
-        struct scfg_directive *directive = &root->directives[i];
-        if (strcmp(directive->name, "active-at-startup") == 0) {
-            if (directive->params_len != 0)
-                fprintf(stderr,
-                    "line %d: too many arguments to active-at-startup\n",
-                    directive->lineno);
-            else
-                state->active_at_startup = true;
-        } else if (strcmp(directive->name, "global-bindings") == 0) {
-            anthywl_state_load_config_bindings(
-                state, &directive->children, &state->global_bindings);
-        } else if (strcmp(directive->name, "composing-bindings") == 0) {
-            anthywl_state_load_config_bindings(
-                state, &directive->children, &state->composing_bindings);
-        } else if (strcmp(directive->name, "selecting-bindings") == 0) {
-            anthywl_state_load_config_bindings(
-                state, &directive->children, &state->selecting_bindings);
-        } else {
-            fprintf(stderr, "line %d: unknown section '%s'\n",
-                directive->lineno, directive->name);
-        }
-    }
-}
-
-bool anthywl_state_load_config(struct anthywl_state *state) {
-    char path[PATH_MAX];
-    char const *prefix;
-    if ((prefix = getenv("XDG_CONFIG_HOME"))) {
-        snprintf(path, sizeof path, "%s/anthywl/config", prefix);
-    } else if ((prefix = getenv("HOME"))) {
-        snprintf(path, sizeof path, "%s/.config/anthywl/config", prefix);
-    } else {
-        fprintf(stderr, "cannot find config file\n");
-        return false;
-    }
-
-    FILE *f = fopen(path, "r");
-    if (f == NULL)
-        f = fmemopen((char *)anthywl_default_config_data,
-        anthywl_default_config_len, "r");
-
-    if (f == NULL) {
-        perror("failed to open default config file");
-        return false;
-    }
-
-    struct scfg_block root;
-    if (scfg_parse_file(&root, f))
-        goto close;
-    anthywl_state_load_config_root(state, &root);
-    scfg_block_finish(&root);
-close:
-    fclose(f);
-    return true;
-}
-
 bool anthywl_state_init(struct anthywl_state *state) {
     wl_list_init(&state->buffers);
     wl_list_init(&state->seats);
     wl_list_init(&state->outputs);
     wl_list_init(&state->timers);
-    wl_array_init(&state->global_bindings);
-    wl_array_init(&state->composing_bindings);
-    wl_array_init(&state->selecting_bindings);
+    anthywl_config_init(&state->config);
     state->max_scale = 1;
 
-    if (!anthywl_state_load_config(state))
+    if (!anthywl_config_load(&state->config))
         return false;
 
     state->wl_display = wl_display_connect(NULL);
@@ -1341,7 +1197,7 @@ bool anthywl_state_init(struct anthywl_state *state) {
 static bool interrupted;
 static void sigint(int signal) { interrupted = true; }
 
-static int anthywl_state_next_timer(struct anthywl_state *state) {
+int anthywl_state_next_timer(struct anthywl_state *state) {
     int timeout = INT_MAX;
     if (wl_list_empty(&state->timers))
         return -1;
@@ -1358,7 +1214,7 @@ static int anthywl_state_next_timer(struct anthywl_state *state) {
     return timeout;
 }
 
-static void anthywl_state_run_timers(struct anthywl_state *state) {
+void anthywl_state_run_timers(struct anthywl_state *state) {
     if (wl_list_empty(&state->timers))
         return;
     struct timespec now;

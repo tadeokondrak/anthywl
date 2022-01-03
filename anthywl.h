@@ -10,8 +10,9 @@
 #include "text-input-unstable-v3-client-protocol.h"
 #include "virtual-keyboard-unstable-v1-client-protocol.h"
 
-#include "buffer.h"
 #include "actions.h"
+#include "buffer.h"
+#include "config.h"
 
 enum anthyl_modifier_index {
     ANTHYWL_SHIFT_INDEX,
@@ -51,10 +52,7 @@ struct anthywl_state {
     struct wl_list seats;
     struct wl_list outputs;
     struct wl_list timers;
-    bool active_at_startup;
-    struct wl_array global_bindings;
-    struct wl_array composing_bindings;
-    struct wl_array selecting_bindings;
+    struct anthywl_config config;
     int max_scale;
 };
 
@@ -153,9 +151,6 @@ struct anthywl_seat_binding {
     enum anthywl_action action;
 };
 
-size_t const anthywl_default_config_len;
-char const *const anthywl_default_config;
-
 void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
     int32_t x, int32_t y, int32_t width, int32_t height);
@@ -251,6 +246,12 @@ void anthywl_seat_composing_update(struct anthywl_seat *seat);
 void anthywl_seat_composing_commit(struct anthywl_seat *seat);
 void anthywl_seat_selecting_update(struct anthywl_seat *seat);
 void anthywl_seat_selecting_commit(struct anthywl_seat *seat);
+int anthywl_binding_compare(void const *_a, void const *_b);
+int anthywl_seat_binding_compare(void const *_a, void const *_b);
+int anthywl_seat_binding_compare_without_action(
+    void const *_a, void const *_b);
+bool anthywl_seat_handle_key_bindings(struct anthywl_seat *seat,
+    struct wl_array *bindings, struct anthywl_seat_binding *press);
 bool anthywl_seat_handle_key(struct anthywl_seat *seat, xkb_keycode_t keycode);
 void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer);
 void anthywl_seat_setup_bindings(struct anthywl_seat *seat,
@@ -259,8 +260,9 @@ void anthywl_seat_cursor_update(struct anthywl_seat *seat);
 void anthywl_seat_cursor_timer_callback(struct anthywl_timer *timer);
 
 void anthywl_reload_cursor_theme(struct anthywl_state *state);
-bool anthywl_state_load_config(struct anthywl_state *state);
 bool anthywl_state_init(struct anthywl_state *state);
+int anthywl_state_next_timer(struct anthywl_state *state);
+void anthywl_state_run_timers(struct anthywl_state *state);
 void anthywl_state_run(struct anthywl_state *state);
 void anthywl_state_finish(struct anthywl_state *state);
 

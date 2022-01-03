@@ -35,6 +35,7 @@ anthywl_bin = executable(
     'anthywl.c',
     'actions.c',
     'buffer.c',
+    'config.c',
     'graphics_buffer.c',
     install: true,
     dependencies: [
