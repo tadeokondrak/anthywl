@@ -29,24 +29,5 @@ pangocairo_dep = dependency('pangocairo')
 scfg_dep = dependency('scfg')
 
 subdir('protocol')
-
-anthywl_bin = executable(
-    'anthywl',
-    'anthywl.c',
-    'actions.c',
-    'buffer.c',
-    'config.c',
-    'graphics_buffer.c',
-    install: true,
-    dependencies: [
-        wayland_client_dep,
-        wayland_cursor_dep,
-        xkbcommon_dep,
-        protocols_dep,
-        anthy_dep,
-        pango_dep,
-        cairo_dep,
-        pangocairo_dep,
-        scfg_dep,
-    ],
-)
+subdir('include')
+subdir('src')
