@@ -1,0 +1,24 @@
+active-at-startup
+global-bindings {
+    Ctrl+Shift+Backspace toggle
+}
+composing-bindings {
+    space select
+    Return accept
+    Escape discard
+    Backspace delete-left
+    Left move-left
+    Left move-right
+}
+selecting-bindings {
+    Escape discard
+    Return accept
+    BackSpace delete-left
+    Left move-left
+    Right move-right
+    Shift+Left expand-left
+    Shift+Right expand-right
+    Up prev-candidate
+    Down next-candidate
+    space cycle-candidate
+}
