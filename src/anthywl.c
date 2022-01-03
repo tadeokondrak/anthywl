@@ -620,7 +620,7 @@ static void find_keycode(struct xkb_keymap *keymap, xkb_keycode_t keycode,
     }
 }
 
-void anthywl_seat_setup_bindings(struct anthywl_seat *seat,
+void anthywl_seat_set_up_bindings(struct anthywl_seat *seat,
     struct wl_array *state_bindings, struct wl_array *seat_bindings)
 {
     struct anthywl_binding *state_binding;
@@ -688,11 +688,11 @@ void zwp_input_method_keyboard_grab_v2_keymap(void *data,
         seat->xkb_state = xkb_state_new(seat->xkb_keymap);
         free(seat->xkb_keymap_string);
         seat->xkb_keymap_string = strdup(map);
-        anthywl_seat_setup_bindings(seat,
+        anthywl_seat_set_up_bindings(seat,
             &seat->state->config.global_bindings, &seat->global_bindings);
-        anthywl_seat_setup_bindings(seat,
+        anthywl_seat_set_up_bindings(seat,
             &seat->state->config.selecting_bindings, &seat->selecting_bindings);
-        anthywl_seat_setup_bindings(seat,
+        anthywl_seat_set_up_bindings(seat,
             &seat->state->config.composing_bindings, &seat->composing_bindings);
     }
     close(fd);
