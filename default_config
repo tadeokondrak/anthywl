@@ -1,7 +1,9 @@
 active-at-startup
+
 global-bindings {
     Ctrl+Shift+Backspace toggle
 }
+
 composing-bindings {
     space select
     Return accept
@@ -10,6 +12,7 @@ composing-bindings {
     Left move-left
     Left move-right
 }
+
 selecting-bindings {
     Escape discard
     Return accept

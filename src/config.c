@@ -6,30 +6,8 @@
 #include "config.h"
 
 char const anthywl_default_config[] =
-    "active-at-startup\n"
-    "global-bindings {\n"
-    "    Ctrl+Shift+Backspace toggle\n"
-    "}\n\n"
-    "composing-bindings {\n"
-    "    space select\n"
-    "    Return accept\n"
-    "    Escape discard\n"
-    "    Backspace delete-left\n"
-    "    Left move-left\n"
-    "    Left move-right\n"
-    "}\n\n"
-    "selecting-bindings {\n"
-    "    Escape discard\n"
-    "    Return accept\n"
-    "    BackSpace delete-left\n"
-    "    Left move-left\n"
-    "    Right move-right\n"
-    "    Shift+Left expand-left\n"
-    "    Shift+Right expand-right\n"
-    "    Up prev-candidate\n"
-    "    Down next-candidate\n"
-    "    space cycle-candidate\n"
-    "}\n";
+#include "default_config.inc"
+;
 
 static void anthywl_config_load_bindings(struct anthywl_config *config,
     struct scfg_block *block, struct wl_array *bindings)

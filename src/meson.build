@@ -1,12 +1,14 @@
+anthywl_src += files(
+    'anthywl.c',
+    'actions.c',
+    'buffer.c',
+    'config.c',
+    'graphics_buffer.c',
+)
+
 anthywl_bin = executable(
     'anthywl',
-    files(
-        'anthywl.c',
-        'actions.c',
-        'buffer.c',
-        'config.c',
-        'graphics_buffer.c',
-    ),
+    anthywl_src,
     install: true,
     include_directories: anthywl_inc,
     dependencies: [

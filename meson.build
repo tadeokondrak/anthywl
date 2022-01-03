@@ -28,6 +28,10 @@ cairo_dep = dependency('cairo')
 pangocairo_dep = dependency('pangocairo')
 scfg_dep = dependency('scfg')
 
+anthywl_src = []
+anthywl_inc = []
+
+subdir('buildtools')
 subdir('protocol')
 subdir('include')
 subdir('src')
