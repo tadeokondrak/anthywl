@@ -1,0 +1,21 @@
+{
+  "name": "CI",
+  "on": {
+    "push": { "branches": ["master"] },
+    "pull_request": { "branches": ["master"] },
+    "workflow_dispatch": {}
+  },
+  "jobs": {
+    "build": {
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        { "uses": "actions/checkout@v2" },
+        {
+          "name": "Install dependencies",
+          "run": "sudo apt-get install ninja-build scdoc libwayland-dev wayland-protocols libxkbcommon-dev libanthy-dev libcairo2-dev libpango1.0-dev"
+        },
+        { "uses": "BSFishy/meson-build@v1.0.3", with: { "meson-version": "0.59.0", "action": "test" } }
+      ]
+    }
+  }
+}

@@ -11,6 +11,7 @@ Build-time:
 
 - meson
 - ninja
+- scdoc (optional, for man pages)
 
 Runtime:
 

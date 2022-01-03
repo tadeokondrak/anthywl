@@ -29,7 +29,7 @@ anthy_dep = dependency('anthy')
 pango_dep = dependency('pango')
 cairo_dep = dependency('cairo')
 pangocairo_dep = dependency('pangocairo')
-scfg_dep = dependency('scfg')
+scfg_dep = dependency('scfg', fallback: 'libscfg')
 scdoc = dependency('scdoc', native: true, required: get_option('man-pages'))
 
 anthywl_src = []
