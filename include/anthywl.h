@@ -254,7 +254,7 @@ bool anthywl_seat_handle_key_bindings(struct anthywl_seat *seat,
     struct wl_array *bindings, struct anthywl_seat_binding *press);
 bool anthywl_seat_handle_key(struct anthywl_seat *seat, xkb_keycode_t keycode);
 void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer);
-void anthywl_seat_setup_bindings(struct anthywl_seat *seat,
+void anthywl_seat_set_up_bindings(struct anthywl_seat *seat,
     struct wl_array *state_bindings, struct wl_array *seat_bindings);
 void anthywl_seat_cursor_update(struct anthywl_seat *seat);
 void anthywl_seat_cursor_timer_callback(struct anthywl_timer *timer);
