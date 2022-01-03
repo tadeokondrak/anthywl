@@ -33,6 +33,7 @@ subdir('protocol')
 anthywl_bin = executable(
     'anthywl',
     'anthywl.c',
+    'actions.c',
     'buffer.c',
     'graphics_buffer.c',
     install: true,
