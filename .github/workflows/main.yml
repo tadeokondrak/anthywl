@@ -6,7 +6,7 @@
     "workflow_dispatch": {}
   },
   "jobs": {
-    "build": {
+    "build-ubuntu": {
       "runs-on": "ubuntu-latest",
       "steps": [
         { "uses": "actions/checkout@v2" },
@@ -14,7 +14,22 @@
           "name": "Install dependencies",
           "run": "sudo apt-get install ninja-build scdoc libwayland-dev wayland-protocols libxkbcommon-dev libanthy-dev libcairo2-dev libpango1.0-dev"
         },
-        { "uses": "BSFishy/meson-build@v1.0.3", with: { "meson-version": "0.59.0", "action": "test" } }
+        { "uses": "BSFishy/meson-build@v1.0.3", "with": { "meson-version": "0.59.0", "action": "test" } }
+      ]
+    },
+    "build-ubuntu-nix": {
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        { "uses": "actions/checkout@v2" },
+        {
+          "uses": "cachix/install-nix-action@v13",
+          "with": {
+            "install_url": "https://nixos-nix-install-tests.cachix.org/serve/i6laym9jw3wg9mw6ncyrk6gjx4l34vvx/install",
+            "install_options": "--tarball-url-prefix https://nixos-nix-install-tests.cachix.org/serve",
+            "extra_nix_config": "experimental-features = nix-command flakes"
+          }
+        },
+        { "name": "Build anthywl", "run": "nix build -L .#packages.x86_64-linux.anthywl"}
       ]
     }
   }

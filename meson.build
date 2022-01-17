@@ -1,7 +1,7 @@
 project(
     'anthywl',
     'c',
-    version: '0.0.1-dev',
+    version: '0.0.1-dev', # also update default.nix
     license: 'MIT',
     meson_version: '>=0.59.0',
     default_options: [
