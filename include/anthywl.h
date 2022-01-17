@@ -266,13 +266,13 @@ void anthywl_state_run_timers(struct anthywl_state *state);
 void anthywl_state_run(struct anthywl_state *state);
 void anthywl_state_finish(struct anthywl_state *state);
 
-struct zwp_input_popup_surface_v2_listener const
+extern struct zwp_input_popup_surface_v2_listener const
     zwp_input_popup_surface_v2_listener;
-struct wl_seat_listener const wl_seat_listener;
-struct wl_surface_listener const wl_surface_listener;
-struct zwp_input_method_keyboard_grab_v2_listener const
+extern struct wl_seat_listener const wl_seat_listener;
+extern struct wl_surface_listener const wl_surface_listener;
+extern struct zwp_input_method_keyboard_grab_v2_listener const
     zwp_input_method_keyboard_grab_v2_listener;
-struct zwp_input_method_v2_listener const zwp_input_method_v2_listener;
-struct wl_pointer_listener const wl_pointer_listener;
-struct wl_output_listener const wl_output_listener;
-struct wl_registry_listener const wl_registry_listener;
+extern struct zwp_input_method_v2_listener const zwp_input_method_v2_listener;
+extern struct wl_pointer_listener const wl_pointer_listener;
+extern struct wl_output_listener const wl_output_listener;
+extern struct wl_registry_listener const wl_registry_listener;
