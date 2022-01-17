@@ -45,6 +45,66 @@
     })
 
 
+struct zwp_input_popup_surface_v2_listener const
+    zwp_input_popup_surface_v2_listener =
+{
+    .text_input_rectangle = zwp_input_popup_surface_v2_text_input_rectangle,
+};
+
+struct wl_seat_listener const wl_seat_listener = {
+    .capabilities = wl_seat_capabilities,
+    .name = wl_seat_name,
+};
+
+struct wl_surface_listener const wl_surface_listener = {
+    .enter = wl_surface_enter,
+    .leave = wl_surface_leave,
+};
+
+struct zwp_input_method_keyboard_grab_v2_listener const
+    zwp_input_method_keyboard_grab_v2_listener =
+{
+    .keymap = zwp_input_method_keyboard_grab_v2_keymap,
+    .key = zwp_input_method_keyboard_grab_v2_key,
+    .modifiers = zwp_input_method_keyboard_grab_v2_modifiers,
+    .repeat_info = zwp_input_method_keyboard_grab_v2_repeat_info,
+};
+
+struct zwp_input_method_v2_listener const zwp_input_method_v2_listener =
+{
+    .activate = zwp_input_method_v2_activate,
+    .deactivate = zwp_input_method_v2_deactivate,
+    .surrounding_text = zwp_input_method_v2_surrounding_text,
+    .text_change_cause = zwp_input_method_v2_text_change_cause,
+    .content_type = zwp_input_method_v2_content_type,
+    .done = zwp_input_method_v2_done,
+    .unavailable = zwp_input_method_v2_unavailable,
+};
+
+struct wl_pointer_listener const wl_pointer_listener = {
+    .enter = wl_pointer_enter,
+    .leave = wl_pointer_leave,
+    .motion = wl_pointer_motion,
+    .button = wl_pointer_button,
+    .axis = wl_pointer_axis,
+    .frame = wl_pointer_frame,
+    .axis_source = wl_pointer_axis_source,
+    .axis_stop = wl_pointer_axis_stop,
+    .axis_discrete = wl_pointer_axis_discrete,
+};
+
+struct wl_output_listener const wl_output_listener = {
+    .geometry = wl_output_geometry,
+    .mode = wl_output_mode,
+    .done = wl_output_done,
+    .scale = wl_output_scale,
+};
+
+struct wl_registry_listener const wl_registry_listener = {
+    .global = wl_registry_global,
+    .global_remove = wl_registry_global_remove,
+};
+
 void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
     int32_t x, int32_t y, int32_t width, int32_t height)
@@ -1311,63 +1371,3 @@ int main(void) {
     anthywl_state_run(&state);
     anthywl_state_finish(&state);
 }
-
-struct zwp_input_popup_surface_v2_listener const
-    zwp_input_popup_surface_v2_listener =
-{
-    .text_input_rectangle = zwp_input_popup_surface_v2_text_input_rectangle,
-};
-
-struct wl_seat_listener const wl_seat_listener = {
-    .capabilities = wl_seat_capabilities,
-    .name = wl_seat_name,
-};
-
-struct wl_surface_listener const wl_surface_listener = {
-    .enter = wl_surface_enter,
-    .leave = wl_surface_leave,
-};
-
-struct zwp_input_method_keyboard_grab_v2_listener const
-    zwp_input_method_keyboard_grab_v2_listener =
-{
-    .keymap = zwp_input_method_keyboard_grab_v2_keymap,
-    .key = zwp_input_method_keyboard_grab_v2_key,
-    .modifiers = zwp_input_method_keyboard_grab_v2_modifiers,
-    .repeat_info = zwp_input_method_keyboard_grab_v2_repeat_info,
-};
-
-struct zwp_input_method_v2_listener const zwp_input_method_v2_listener =
-{
-    .activate = zwp_input_method_v2_activate,
-    .deactivate = zwp_input_method_v2_deactivate,
-    .surrounding_text = zwp_input_method_v2_surrounding_text,
-    .text_change_cause = zwp_input_method_v2_text_change_cause,
-    .content_type = zwp_input_method_v2_content_type,
-    .done = zwp_input_method_v2_done,
-    .unavailable = zwp_input_method_v2_unavailable,
-};
-
-struct wl_pointer_listener const wl_pointer_listener = {
-    .enter = wl_pointer_enter,
-    .leave = wl_pointer_leave,
-    .motion = wl_pointer_motion,
-    .button = wl_pointer_button,
-    .axis = wl_pointer_axis,
-    .frame = wl_pointer_frame,
-    .axis_source = wl_pointer_axis_source,
-    .axis_stop = wl_pointer_axis_stop,
-    .axis_discrete = wl_pointer_axis_discrete,
-};
-
-struct wl_output_listener const wl_output_listener = {
-    .geometry = wl_output_geometry,
-    .mode = wl_output_mode,
-    .done = wl_output_done,
-    .scale = wl_output_scale,
-};
-
-struct wl_registry_listener const wl_registry_listener = {
-    .global = wl_registry_global,
-    .global_remove = wl_registry_global_remove,
-};
