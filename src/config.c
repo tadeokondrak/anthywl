@@ -97,7 +97,9 @@ void anthywl_config_init(struct anthywl_config *config) {
 }
 
 void anthywl_config_finish(struct anthywl_config *config) {
-    // TODO
+    wl_array_release(&config->selecting_bindings);
+    wl_array_release(&config->composing_bindings);
+    wl_array_release(&config->global_bindings);
 }
 
 bool anthywl_config_load(struct anthywl_config *config) {

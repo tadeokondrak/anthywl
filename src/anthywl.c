@@ -1329,6 +1329,7 @@ void anthywl_state_finish(struct anthywl_state *state) {
 #ifdef ANTHYWL_IPC_SUPPORT
     anthywl_ipc_finish(&state->ipc);
 #endif
+    anthywl_config_finish(&state->config);
 }
 
 int main(void) {
