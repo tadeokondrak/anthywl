@@ -30,7 +30,12 @@ pango_dep = dependency('pango')
 cairo_dep = dependency('cairo')
 pangocairo_dep = dependency('pangocairo')
 scfg_dep = dependency('scfg', fallback: 'libscfg')
+varlink_dep = dependency('libvarlink', required: get_option('ipc'))
 scdoc = dependency('scdoc', native: true, required: get_option('man-pages'))
+
+if get_option('ipc').enabled()
+    add_project_arguments(['-DANTHYWL_IPC_SUPPORT'], language: 'c')
+endif
 
 anthywl_src = []
 anthywl_inc = []
