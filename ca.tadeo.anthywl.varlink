@@ -1,0 +1,5 @@
+interface ca.tadeo.anthywl
+
+method Action(seat: string, action: string) -> ()
+
+error NoSuchSeat (seat: string)

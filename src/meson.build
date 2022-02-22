@@ -6,6 +6,10 @@ anthywl_src += files(
     'graphics_buffer.c',
 )
 
+if get_option('ipc').enabled()
+    anthywl_src += files('ipc.c')
+endif
+
 anthywl_bin = executable(
     'anthywl',
     anthywl_src,
@@ -21,5 +25,6 @@ anthywl_bin = executable(
         cairo_dep,
         pangocairo_dep,
         scfg_dep,
+        varlink_dep,
     ],
 )

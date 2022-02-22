@@ -1,4 +1,4 @@
-foreach file: ['default_config']
+foreach file: ['default_config', 'ca.tadeo.anthywl.varlink']
     anthywl_src += custom_target(file,
         input: '..' / file,
         output: file + '.inc',

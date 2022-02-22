@@ -6,6 +6,10 @@
 #include <wayland-client-core.h>
 #include <xkbcommon/xkbcommon.h>
 
+#ifdef ANTHYWL_IPC_SUPPORT
+#include <varlink.h>
+#endif
+
 #include "input-method-unstable-v2-client-protocol.h"
 #include "text-input-unstable-v3-client-protocol.h"
 #include "virtual-keyboard-unstable-v1-client-protocol.h"
@@ -13,6 +17,7 @@
 #include "actions.h"
 #include "buffer.h"
 #include "config.h"
+#include "ipc.h"
 
 enum anthyl_modifier_index {
     ANTHYWL_SHIFT_INDEX,
@@ -53,6 +58,7 @@ struct anthywl_state {
     struct wl_list outputs;
     struct wl_list timers;
     struct anthywl_config config;
+    struct anthywl_ipc ipc;
     int max_scale;
 };
 

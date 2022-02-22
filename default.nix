@@ -10,8 +10,8 @@
 , anthy
 , pango
 , cairo
-, systemd
 , libscfg
+, libvarlink
 }:
 
 stdenv.mkDerivation {
@@ -36,7 +36,7 @@ stdenv.mkDerivation {
     anthy
     pango
     cairo
-    systemd
     libscfg
+    libvarlink
   ];
 }

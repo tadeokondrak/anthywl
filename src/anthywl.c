@@ -30,6 +30,11 @@
 #include "buffer.h"
 #include "graphics_buffer.h"
 
+#ifdef ANTHYWL_IPC_SUPPORT
+#include <varlink.h>
+#include "ipc.h"
+#endif
+
 #define min(a, b)               \
     ({                          \
         __typeof__(a) _a = (a); \
@@ -44,6 +49,7 @@
         _a > _b ? _a : _b;      \
     })
 
+#define ARRAY_LEN(x) (sizeof (x) / sizeof *(x))
 
 void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
@@ -1159,6 +1165,11 @@ bool anthywl_state_init(struct anthywl_state *state) {
     if (!anthywl_config_load(&state->config))
         return false;
 
+#ifdef ANTHYWL_IPC_SUPPORT
+    if (!anthywl_ipc_init(&state->ipc))
+        return false;
+#endif
+
     state->wl_display = wl_display_connect(NULL);
     if (state->wl_display == NULL) {
         perror("wl_display_connect");
@@ -1233,30 +1244,48 @@ void anthywl_state_run(struct anthywl_state *state) {
     state->running = true;
     signal(SIGINT, sigint);
     while (state->running && !interrupted) {
-        struct pollfd pfd = {
-            .fd = wl_display_get_fd(state->wl_display),
-            .events = POLLIN,
+        struct pollfd pfds[] = {
+            {
+                .fd = wl_display_get_fd(state->wl_display),
+                .events = POLLIN,
+            },
+#ifdef ANTHYWL_IPC_SUPPORT
+            {
+                .fd = varlink_service_get_fd(state->ipc.service),
+                .events = POLLIN,
+            },
+#endif
         };
 
-        if (poll(&pfd, 1, anthywl_state_next_timer(state)) == -1) {
+        if (poll(pfds, ARRAY_LEN(pfds), anthywl_state_next_timer(state)) == -1) {
             if (errno == EINTR)
                 continue;
             perror("poll");
             break;
         }
 
-        while (wl_display_prepare_read(state->wl_display) != 0)
-            wl_display_dispatch_pending(state->wl_display);
+        if (pfds[0].events & POLLIN) {
+            while (wl_display_prepare_read(state->wl_display) != 0)
+                wl_display_dispatch_pending(state->wl_display);
 
-        if (pfd.events & POLLIN)
             wl_display_read_events(state->wl_display);
-        else
-            wl_display_cancel_read(state->wl_display);
 
-        if (wl_display_dispatch_pending(state->wl_display) == -1) {
-            perror("wl_display_dispatch");
-            break;
+            if (wl_display_dispatch_pending(state->wl_display) == -1) {
+                perror("wl_display_dispatch");
+                break;
+            }
         }
+
+#ifdef ANTHYWL_IPC_SUPPORT
+        if (pfds[1].events & POLLIN) {
+            long res = varlink_service_process_events(state->ipc.service);
+            if (res < 0) {
+                fprintf(stderr, "varlink_service_process_events: %s\n",
+                    varlink_error_string(-res));
+                break;
+            }
+        }
+#endif
 
         anthywl_state_run_timers(state);
 
@@ -1297,6 +1326,9 @@ void anthywl_state_finish(struct anthywl_state *state) {
         wl_registry_destroy(state->wl_registry);
     if (state->wl_display != NULL)
         wl_display_disconnect(state->wl_display);
+#ifdef ANTHYWL_IPC_SUPPORT
+    anthywl_ipc_finish(&state->ipc);
+#endif
 }
 
 int main(void) {
