@@ -183,7 +183,10 @@ struct anthywl_graphics_buffer *anthywl_seat_selecting_draw_popup(
                 pango_attr_list_insert(attrs, attr);
             }
             char *text;
-            asprintf(&text, "%d. %s", i - candidate_offset + 1, buf);
+            if (asprintf(&text, "%d. %s", i - candidate_offset + 1, buf) < 0) {
+                fprintf(stderr, "Memory allocation failed\n");
+                abort();
+            }
             pango_layout_set_text(layout, text, -1);
             free(text);
             pango_layout_set_attributes(layout, attrs);
