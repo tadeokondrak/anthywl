@@ -566,7 +566,7 @@ handle:
         anthywl_seat_selecting_commit(seat);
         goto handle;
     }
-    if (seat->is_composing) {
+    if (seat->is_composing && keysym != XKB_KEY_space) {
         uint32_t codepoint = xkb_state_key_get_utf32(seat->xkb_state, keycode);
         if (codepoint != 0 && codepoint < 32)
             return false;
