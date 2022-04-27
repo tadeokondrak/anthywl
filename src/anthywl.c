@@ -687,7 +687,7 @@ void zwp_input_method_keyboard_grab_v2_keymap(void *data,
         seat->mod_indices[ANTHYWL_ALT_INDEX] = xkb_keymap_mod_get_index(
             seat->xkb_keymap, XKB_MOD_NAME_ALT);
         seat->mod_indices[ANTHYWL_NUM_INDEX] = xkb_keymap_mod_get_index(
-            seat->xkb_keymap, XKB_MOD_NAME_ALT);
+            seat->xkb_keymap, XKB_MOD_NAME_NUM);
         seat->mod_indices[ANTHYWL_MOD3_INDEX] = xkb_keymap_mod_get_index(
             seat->xkb_keymap, "Mod3");
         seat->mod_indices[ANTHYWL_LOGO_INDEX] = xkb_keymap_mod_get_index(
