@@ -641,7 +641,6 @@ void anthywl_seat_set_up_bindings(struct anthywl_seat *seat,
         matches.keysym = state_binding->keysym;
         matches.keycodes.size = 0;
         xkb_keymap_key_for_each(seat->xkb_keymap, find_keycode, &matches);
-        assert(matches.keycodes.size);
         xkb_mod_mask_t mod_mask = 0;
         for (int i = 0; i < _ANTHYWL_MOD_LAST; i++) {
             if (state_binding->modifiers & (1 << i)) {
