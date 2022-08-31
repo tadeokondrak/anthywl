@@ -1,6 +1,6 @@
 { stdenv
 , pkg-config
-, meson_0_60
+, meson
 , ninja
 , scdoc
 , python
@@ -23,7 +23,7 @@ stdenv.mkDerivation {
 
   nativeBuildInputs = [
     pkg-config
-    meson_0_60
+    meson
     ninja
     scdoc
     python
