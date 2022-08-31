@@ -59,7 +59,9 @@ struct anthywl_state {
     struct wl_list outputs;
     struct wl_list timers;
     struct anthywl_config config;
+#ifdef ANTHYWL_IPC_SUPPORT
     struct anthywl_ipc ipc;
+#endif
     int max_scale;
 };
 
