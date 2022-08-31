@@ -29,6 +29,7 @@
 #include "anthywl.h"
 #include "buffer.h"
 #include "graphics_buffer.h"
+#include "keymap.h"
 
 #ifdef ANTHYWL_IPC_SUPPORT
 #include <varlink.h>
@@ -335,7 +336,10 @@ void anthywl_seat_init_protocols(struct anthywl_seat *seat) {
             seat->state->zwp_input_method_manager_v2, seat->wl_seat);
     zwp_input_method_v2_add_listener(seat->zwp_input_method_v2,
         &zwp_input_method_v2_listener, seat);
-    seat->zwp_virtual_keyboard_v1 =
+    seat->zwp_virtual_keyboard_v1_passthrough =
+        zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
+            seat->state->zwp_virtual_keyboard_manager_v1, seat->wl_seat);
+    seat->zwp_virtual_keyboard_v1_backup_input =
         zwp_virtual_keyboard_manager_v1_create_virtual_keyboard(
             seat->state->zwp_virtual_keyboard_manager_v1, seat->wl_seat);
     seat->zwp_input_method_keyboard_grab_v2 =
@@ -372,7 +376,8 @@ void anthywl_seat_destroy(struct anthywl_seat *seat) {
     if (seat->are_protocols_initted) {
         zwp_input_popup_surface_v2_destroy(seat->zwp_input_popup_surface_v2);
         wl_surface_destroy(seat->wl_surface);
-        zwp_virtual_keyboard_v1_destroy(seat->zwp_virtual_keyboard_v1);
+        zwp_virtual_keyboard_v1_destroy(seat->zwp_virtual_keyboard_v1_backup_input);
+        zwp_virtual_keyboard_v1_destroy(seat->zwp_virtual_keyboard_v1_passthrough);
         zwp_input_method_keyboard_grab_v2_destroy(
             seat->zwp_input_method_keyboard_grab_v2);
         zwp_input_method_v2_destroy(seat->zwp_input_method_v2);
@@ -391,11 +396,38 @@ void anthywl_seat_composing_update(struct anthywl_seat *seat) {
     anthywl_seat_draw_popup(seat);
 }
 
-void anthywl_seat_composing_commit(struct anthywl_seat *seat) {
-    zwp_input_method_v2_commit_string(
-        seat->zwp_input_method_v2, seat->buffer.text);
+bool anthywl_seat_send_string(struct anthywl_seat *seat, const char *text) {
+    if (!seat->active) {
+        int keymap_fd;
+        uint32_t *keys;
+        size_t keymap_size, keys_size;
+        if (!anthywl_make_keymap(
+            text, &keymap_fd, &keymap_size, &keys, &keys_size))
+        {
+            return false;
+        }
+        zwp_virtual_keyboard_v1_keymap(
+            seat->zwp_virtual_keyboard_v1_backup_input,
+            WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1, keymap_fd, keymap_size);
+        for (size_t i = 0; i < keys_size; i++) {
+            zwp_virtual_keyboard_v1_key(
+                seat->zwp_virtual_keyboard_v1_backup_input,
+                0, keys[i], WL_KEYBOARD_KEY_STATE_PRESSED);
+            zwp_virtual_keyboard_v1_key(
+                seat->zwp_virtual_keyboard_v1_backup_input,
+                0, keys[i], WL_KEYBOARD_KEY_STATE_RELEASED);
+        }
+        free(keys);
+        return true;
+    }
+    zwp_input_method_v2_commit_string(seat->zwp_input_method_v2, text);
     zwp_input_method_v2_commit(
         seat->zwp_input_method_v2, seat->done_events_received);
+    return true;
+}
+
+void anthywl_seat_composing_commit(struct anthywl_seat *seat) {
+    anthywl_seat_send_string(seat, seat->buffer.text);
     anthywl_buffer_clear(&seat->buffer);
     anthywl_seat_draw_popup(seat);
 }
@@ -451,9 +483,7 @@ void anthywl_seat_selecting_commit(struct anthywl_seat *seat) {
     wl_array_add(&buffer, 1);
     ((char *)buffer.data)[buffer.size - 1] = 0;
 
-    zwp_input_method_v2_commit_string(seat->zwp_input_method_v2, buffer.data);
-    zwp_input_method_v2_commit(
-        seat->zwp_input_method_v2, seat->done_events_received);
+    anthywl_seat_send_string(seat, buffer.data);
     seat->is_selecting = false;
     seat->is_selecting_popup_visible = false;
     anthywl_buffer_clear(&seat->buffer);
@@ -598,7 +628,7 @@ void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
     if (!anthywl_seat_handle_key(seat, seat->repeating_keycode)) {
         wl_list_remove(&timer->link);
         zwp_virtual_keyboard_v1_key(
-            seat->zwp_virtual_keyboard_v1, seat->repeating_timestamp,
+            seat->zwp_virtual_keyboard_v1_passthrough, seat->repeating_timestamp,
             seat->repeating_keycode - 8, WL_KEYBOARD_KEY_STATE_PRESSED);
         seat->repeating_keycode = 0;
     } else {
@@ -672,7 +702,7 @@ void zwp_input_method_keyboard_grab_v2_keymap(void *data,
         || strcmp(seat->xkb_keymap_string, map) != 0)
     {
         zwp_virtual_keyboard_v1_keymap(
-            seat->zwp_virtual_keyboard_v1, format, fd, size);
+            seat->zwp_virtual_keyboard_v1_passthrough, format, fd, size);
         xkb_keymap_unref(seat->xkb_keymap);
         xkb_state_unref(seat->xkb_state);
         seat->xkb_keymap = xkb_keymap_new_from_string(seat->xkb_context, map,
@@ -744,7 +774,7 @@ void zwp_input_method_keyboard_grab_v2_key(void *data,
         return;
     }
 
-    if (seat->active && state == WL_KEYBOARD_KEY_STATE_PRESSED)
+    if (state == WL_KEYBOARD_KEY_STATE_PRESSED)
         handled |= anthywl_seat_handle_key(seat, keycode);
 
     if (state == WL_KEYBOARD_KEY_STATE_PRESSED
@@ -787,7 +817,7 @@ void zwp_input_method_keyboard_grab_v2_key(void *data,
 
 forward:
     zwp_virtual_keyboard_v1_key(
-        seat->zwp_virtual_keyboard_v1, time, key, state);
+        seat->zwp_virtual_keyboard_v1_passthrough, time, key, state);
 }
 
 void zwp_input_method_keyboard_grab_v2_modifiers(void *data,
@@ -799,7 +829,7 @@ void zwp_input_method_keyboard_grab_v2_modifiers(void *data,
     struct anthywl_seat *seat = data;
     xkb_state_update_mask(seat->xkb_state,
         mods_depressed, mods_latched, mods_locked, 0, 0, group);
-    zwp_virtual_keyboard_v1_modifiers(seat->zwp_virtual_keyboard_v1,
+    zwp_virtual_keyboard_v1_modifiers(seat->zwp_virtual_keyboard_v1_passthrough,
         mods_depressed, mods_latched, mods_locked, group);
 }
 
