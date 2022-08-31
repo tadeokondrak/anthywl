@@ -4,6 +4,7 @@ anthywl_src += files(
     'buffer.c',
     'config.c',
     'graphics_buffer.c',
+    'keymap.c',
 )
 
 if get_option('ipc').enabled()

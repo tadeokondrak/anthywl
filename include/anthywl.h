@@ -85,7 +85,8 @@ struct anthywl_seat {
     bool are_protocols_initted;
     struct zwp_input_method_v2 *zwp_input_method_v2;
     struct zwp_input_method_keyboard_grab_v2 *zwp_input_method_keyboard_grab_v2;
-    struct zwp_virtual_keyboard_v1 *zwp_virtual_keyboard_v1;
+    struct zwp_virtual_keyboard_v1 *zwp_virtual_keyboard_v1_passthrough;
+    struct zwp_virtual_keyboard_v1 *zwp_virtual_keyboard_v1_backup_input;
 
     // wl_pointer
     struct wl_pointer *wl_pointer;
