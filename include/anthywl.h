@@ -19,7 +19,6 @@
 #include <varlink.h>
 #endif
 
-
 enum anthyl_modifier_index {
     ANTHYWL_SHIFT_INDEX,
     ANTHYWL_CAPS_INDEX,

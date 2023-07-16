@@ -13,7 +13,7 @@
              , meson
              , ninja
              }:
-              stdenv.mkDerivation rec {
+              stdenv.mkDerivation {
                 pname = "libscfg";
                 version = "unstable-2021-12-31";
                 src = fetchFromSourcehut {
