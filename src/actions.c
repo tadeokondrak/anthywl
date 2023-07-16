@@ -99,11 +99,7 @@ static void anthywl_seat_expand(struct anthywl_seat *seat, int amount) {
     anthy_get_stat(seat->anthy_context, &conv_stat);
     seat->selected_candidates = realloc(
         seat->selected_candidates, conv_stat.nr_segment * sizeof(int));
-    int difference = conv_stat.nr_segment - seat->segment_count;
-    if (difference > 0) {
-        memset(seat->selected_candidates + seat->segment_count,
-            0, difference * sizeof(int));
-    }
+    memset(seat->selected_candidates, 0, conv_stat.nr_segment * sizeof(int));
     seat->segment_count = conv_stat.nr_segment;
     anthywl_seat_selecting_update(seat);
 }
