@@ -441,7 +441,7 @@ void anthywl_buffer_convert_romaji(struct anthywl_buffer *buffer) {
     if (c1 == 'c' && c2 == 'h' && youon[c3])
         c1 = 't', c2 = 'y';
 
-    if (c1 && c2 == 'y' && youon[c3]) {
+    if (c1 && twos[c1] && c2 == 'y' && youon[c3]) {
         anthywl_buffer_delete_backwards(buffer, 3);
         if (c1 != 'x' && c1 != 'l')
             anthywl_buffer_append(buffer, twos[c1]['i']);
