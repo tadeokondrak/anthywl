@@ -50,7 +50,9 @@ static char const *const ones[128] = {
 
 static char const *const youon[128] = {
     ['a'] = "ゃ",
+    ['i'] = "ぃ",
     ['u'] = "ゅ",
+    ['e'] = "ぇ",
     ['o'] = "ょ",
 };
 
