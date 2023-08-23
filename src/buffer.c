@@ -405,8 +405,6 @@ void anthywl_buffer_convert_romaji(struct anthywl_buffer *buffer) {
     // shi -> si
     // chi -> ti
     // thi -> texi
-    // t'i -> texi
-    // dzu -> du
 
     if (c1 == 's' && c2 == 'h' && c3 == 'i') {
         anthywl_buffer_delete_backwards(buffer, 3);
@@ -415,6 +413,12 @@ void anthywl_buffer_convert_romaji(struct anthywl_buffer *buffer) {
     }
 
     if (c1 == 'c' && c2 == 'h' && c3 == 'i') {
+        anthywl_buffer_delete_backwards(buffer, 3);
+        anthywl_buffer_append(buffer, "ち");
+        return;
+    }
+
+    if (c1 == 't' && c2 == 'h' && c3 == 'i') {
         anthywl_buffer_delete_backwards(buffer, 3);
         anthywl_buffer_append(buffer, "ち");
         return;
