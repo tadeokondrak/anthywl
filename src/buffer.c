@@ -420,7 +420,7 @@ void anthywl_buffer_convert_romaji(struct anthywl_buffer *buffer) {
 
     if (c1 == 't' && c2 == 'h' && c3 == 'i') {
         anthywl_buffer_delete_backwards(buffer, 3);
-        anthywl_buffer_append(buffer, "ち");
+        anthywl_buffer_append(buffer, "てぃ");
         return;
     }
 
