@@ -1,5 +1,6 @@
 #include "keymap.h"
 
+#include <assert.h>
 #include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +11,7 @@
 #include <unistd.h>
 
 #include <wayland-util.h>
+#include <xkbcommon/xkbcommon.h>
 
 static unsigned char const *utf8_simple(unsigned char const *s, long *c) {
     unsigned char const *next;
@@ -39,9 +41,6 @@ static unsigned char const *utf8_simple(unsigned char const *s, long *c) {
         *c = -1; // surrogate half
     return next;
 }
-
-#include <xkbcommon/xkbcommon.h>
-#include <assert.h>
 
 
 static int compare_keysym(void const *a, void const *b) {
@@ -154,7 +153,6 @@ bool anthywl_make_keymap(char const *string,
     struct xkb_context *context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
     char *map = mmap(NULL, keymap_size, PROT_READ, MAP_PRIVATE, duplicated_fd, 0);
     assert(map);
-    printf("%s", map);
     struct xkb_keymap *keymap = xkb_keymap_new_from_string(
         context, map, XKB_KEYMAP_FORMAT_TEXT_V1, XKB_KEYMAP_COMPILE_NO_FLAGS);
     munmap(map, keymap_size);
