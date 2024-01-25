@@ -127,7 +127,7 @@ static bool anthywl_seat_handle_select(struct anthywl_seat *seat) {
         return true;
     anthywl_buffer_convert_trailing_n(&seat->buffer);
     seat->is_selecting = true;
-    seat->is_selecting_popup_visible = seat->is_composing_popup_visible;
+    seat->is_selecting_popup_visible = true;
     anthy_reset_context(seat->anthy_context);
     anthy_set_string(seat->anthy_context, seat->buffer.text);
     struct anthy_conv_stat conv_stat;
