@@ -74,6 +74,13 @@ static void anthywl_config_load_root(struct anthywl_config *config,
                     directive->lineno);
             else
                 config->active_at_startup = true;
+        } else if (strcmp(directive->name, "emulate-im-popups") == 0) {
+            if (directive->params_len != 0)
+                fprintf(stderr,
+                    "line %d: too many arguments to emulate-im-popups\n",
+                    directive->lineno);
+            else
+                config->emulate_im_popups = true;
         } else if (strcmp(directive->name, "global-bindings") == 0) {
             anthywl_config_load_bindings(
                 config, &directive->children, &config->global_bindings);

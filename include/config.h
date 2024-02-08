@@ -5,6 +5,7 @@
 
 struct anthywl_config {
     bool active_at_startup;
+    bool emulate_im_popups;
     struct wl_array global_bindings;
     struct wl_array composing_bindings;
     struct wl_array selecting_bindings;

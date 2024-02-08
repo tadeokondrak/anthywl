@@ -9,6 +9,7 @@
 #include "input-method-unstable-v2-client-protocol.h"
 #include "text-input-unstable-v3-client-protocol.h"
 #include "virtual-keyboard-unstable-v1-client-protocol.h"
+#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #include "actions.h"
 #include "buffer.h"
@@ -48,6 +49,7 @@ struct anthywl_state {
     struct wl_registry *wl_registry;
     struct wl_compositor *wl_compositor;
     struct wl_shm *wl_shm;
+    struct zwlr_layer_shell_v1 *zwlr_layer_shell_v1;
     struct zwp_input_method_manager_v2 *zwp_input_method_manager_v2;
     struct zwp_virtual_keyboard_manager_v1 *zwp_virtual_keyboard_manager_v1;
     struct wl_cursor_theme *wl_cursor_theme;
@@ -144,8 +146,10 @@ struct anthywl_seat {
     anthy_context_t anthy_context;
 
     // popup
-    struct wl_surface *wl_surface;
+    struct wl_surface *popup_wl_surface;
+    struct wl_surface *layer_wl_surface;
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2;
+    struct zwlr_layer_surface_v1 *zwlr_layer_surface_v1;
 };
 
 struct anthywl_binding {
@@ -163,6 +167,12 @@ struct anthywl_seat_binding {
 void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
     int32_t x, int32_t y, int32_t width, int32_t height);
+
+void zwlr_layer_surface_v1_configure(void *data,
+    struct zwlr_layer_surface_v1 *zwlr_layer_surface_v1, uint32_t serial,
+    uint32_t width, uint32_t height);
+void zwlr_layer_surface_v1_closed(void *data,
+    struct zwlr_layer_surface_v1 *zwlr_layer_surface_v1);
 
 void wl_surface_enter(void *data, struct wl_surface *wl_surface,
     struct wl_output *wl_output);
@@ -277,6 +287,8 @@ void anthywl_state_finish(struct anthywl_state *state);
 
 extern struct zwp_input_popup_surface_v2_listener const
     zwp_input_popup_surface_v2_listener;
+extern struct zwlr_layer_surface_v1_listener const
+    zwlr_layer_surface_v1_listener;
 extern struct wl_seat_listener const wl_seat_listener;
 extern struct wl_surface_listener const wl_surface_listener;
 extern struct zwp_input_method_keyboard_grab_v2_listener const
