@@ -16,17 +16,6 @@
         },
         { "uses": "BSFishy/meson-build@v1.0.3", "with": { "meson-version": "0.59.0", "action": "test" } }
       ]
-    },
-    "build-ubuntu-nix": {
-      "runs-on": "ubuntu-latest",
-      "steps": [
-        { "uses": "actions/checkout@v2" },
-        {
-          "uses": "cachix/install-nix-action@v22",
-          "with": { "extra_nix_config": "experimental-features = nix-command flakes" }
-        },
-        { "name": "Build anthywl", "run": "nix build -L .#packages.x86_64-linux.anthywl"}
-      ]
     }
   }
 }
