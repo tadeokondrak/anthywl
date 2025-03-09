@@ -1,11 +1,8 @@
 # anthywl
 
-Work-in-progress Japanese input method for sway.
+Basic Japanese input method for Sway and other Wayland compositors.
 
 ## Dependencies
-
-For popup support, a currently unmerged Sway patch is needed:
-https://github.com/swaywm/sway/pull/5890
 
 Build-time:
 
