@@ -1,5 +1,4 @@
 active-at-startup
-# emulate-im-popups
 
 global-bindings {
     Ctrl+Shift+Backspace toggle

@@ -7,11 +7,9 @@ wayland_scanner_bin = find_program(
 )
 
 protocols = {
-    'xdg-shell': wayland_protocols_dir / 'stable/xdg-shell/xdg-shell.xml',
     'text-input-v3': wayland_protocols_dir / 'unstable/text-input/text-input-unstable-v3.xml',
     'zwp-input-method-unstable-v2': 'input-method-unstable-v2.xml',
     'zwp-virtual-keyboard-unstable-v1': 'virtual-keyboard-unstable-v1.xml',
-    'wlr-layer-shell-unstable-v1': 'wlr-layer-shell-unstable-v1.xml',
 }
 
 protocols_src = []

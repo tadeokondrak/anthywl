@@ -30,7 +30,6 @@
 #include "buffer.h"
 #include "graphics_buffer.h"
 #include "keymap.h"
-#include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
 #ifdef ANTHYWL_IPC_SUPPORT
 #include <varlink.h>
@@ -56,19 +55,6 @@
 void zwp_input_popup_surface_v2_text_input_rectangle(void *data,
     struct zwp_input_popup_surface_v2 *zwp_input_popup_surface_v2,
     int32_t x, int32_t y, int32_t width, int32_t height)
-{
-}
-
-void zwlr_layer_surface_v1_configure(void *data,
-    struct zwlr_layer_surface_v1 *zwlr_layer_surface_v1, uint32_t serial,
-    uint32_t width, uint32_t height)
-{
-    zwlr_layer_surface_v1_ack_configure(zwlr_layer_surface_v1, serial);
-    anthywl_seat_draw_popup(data);
-}
-
-void zwlr_layer_surface_v1_closed(void *data,
-    struct zwlr_layer_surface_v1 *zwlr_layer_surface_v1)
 {
 }
 
@@ -274,43 +260,15 @@ void anthywl_seat_draw_popup(struct anthywl_seat *seat) {
     }
 
     if (buffer) {
-        wl_surface_attach(seat->popup_wl_surface, buffer->wl_buffer, 0, 0);
-        wl_surface_damage_buffer(seat->popup_wl_surface, 0, 0,
+        wl_surface_attach(seat->wl_surface, buffer->wl_buffer, 0, 0);
+        wl_surface_damage_buffer(seat->wl_surface, 0, 0,
             buffer->width, buffer->height);
-        wl_surface_set_buffer_scale(seat->popup_wl_surface, scale);
-
-        if (seat->state->config.emulate_im_popups) {
-            assert(seat->zwlr_layer_surface_v1);
-            zwlr_layer_surface_v1_set_anchor(seat->zwlr_layer_surface_v1,
-                ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
-                | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT);
-            zwlr_layer_surface_v1_set_size(
-                seat->zwlr_layer_surface_v1, buffer->width, buffer->height);
-            zwlr_layer_surface_v1_set_margin(seat->zwlr_layer_surface_v1,
-                5 * scale, 5 * scale, 5 * scale, 5 * scale);
-            wl_surface_attach(seat->layer_wl_surface, buffer->wl_buffer, 0, 0);
-            wl_surface_damage_buffer(seat->layer_wl_surface, 0, 0,
-                buffer->width, buffer->height);
-            wl_surface_set_buffer_scale(seat->layer_wl_surface, scale);
-        }
+        wl_surface_set_buffer_scale(seat->wl_surface, scale);
     } else {
-        wl_surface_attach(seat->popup_wl_surface, NULL, 0, 0);
-        if (seat->state->config.emulate_im_popups) {
-            zwlr_layer_surface_v1_set_anchor(seat->zwlr_layer_surface_v1,
-                ZWLR_LAYER_SURFACE_V1_ANCHOR_TOP
-                | ZWLR_LAYER_SURFACE_V1_ANCHOR_BOTTOM
-                | ZWLR_LAYER_SURFACE_V1_ANCHOR_LEFT
-                | ZWLR_LAYER_SURFACE_V1_ANCHOR_RIGHT);
-            zwlr_layer_surface_v1_set_size(
-                seat->zwlr_layer_surface_v1, 0, 0);
-            wl_surface_attach(seat->layer_wl_surface, NULL, 0, 0);
-        }
+        wl_surface_attach(seat->wl_surface, NULL, 0, 0);
     }
 
-    wl_surface_commit(seat->popup_wl_surface);
-    if (seat->state->config.emulate_im_popups) {
-        wl_surface_commit(seat->layer_wl_surface);
-    }
+    wl_surface_commit(seat->wl_surface);
 }
 
 void anthywl_seat_init(struct anthywl_seat *seat,
@@ -329,7 +287,6 @@ void anthywl_seat_init(struct anthywl_seat *seat,
     anthy_context_set_encoding(seat->anthy_context, ANTHY_UTF8_ENCODING);
     seat->repeat_timer.callback = anthywl_seat_repeat_timer_callback;
     seat->is_composing = state->config.active_at_startup;
-    seat->is_composing_popup_visible = true;
 }
 
 void wl_surface_enter(void *data, struct wl_surface *wl_surface,
@@ -390,23 +347,14 @@ void anthywl_seat_init_protocols(struct anthywl_seat *seat) {
     zwp_input_method_keyboard_grab_v2_add_listener(
         seat->zwp_input_method_keyboard_grab_v2,
         &zwp_input_method_keyboard_grab_v2_listener, seat);
-    seat->popup_wl_surface = wl_compositor_create_surface(seat->state->wl_compositor);
-    wl_surface_add_listener(seat->popup_wl_surface, &wl_surface_listener, seat);
+    seat->wl_surface = wl_compositor_create_surface(seat->state->wl_compositor);
+    wl_surface_add_listener(seat->wl_surface, &wl_surface_listener, seat);
+    anthywl_seat_draw_popup(seat);
     seat->zwp_input_popup_surface_v2 =
         zwp_input_method_v2_get_input_popup_surface(
-            seat->zwp_input_method_v2, seat->popup_wl_surface);
+            seat->zwp_input_method_v2, seat->wl_surface);
     zwp_input_popup_surface_v2_add_listener(seat->zwp_input_popup_surface_v2,
         &zwp_input_popup_surface_v2_listener, seat);
-    if (seat->state->config.emulate_im_popups) {
-        seat->layer_wl_surface = wl_compositor_create_surface(seat->state->wl_compositor);
-        wl_surface_add_listener(seat->layer_wl_surface, &wl_surface_listener, seat);
-        seat->zwlr_layer_surface_v1 = zwlr_layer_shell_v1_get_layer_surface(
-            seat->state->zwlr_layer_shell_v1, seat->layer_wl_surface, NULL,
-            ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY, "anthywl");
-        zwlr_layer_surface_v1_add_listener(seat->zwlr_layer_surface_v1,
-            &zwlr_layer_surface_v1_listener, seat);
-    }
-    anthywl_seat_draw_popup(seat);
     seat->wl_surface_cursor =
         wl_compositor_create_surface(seat->state->wl_compositor);
     wl_surface_add_listener(
@@ -426,12 +374,8 @@ void anthywl_seat_destroy(struct anthywl_seat *seat) {
     xkb_context_unref(seat->xkb_context);
     free(seat->xkb_keymap_string);
     if (seat->are_protocols_initted) {
-        if (seat->state->config.emulate_im_popups) {
-            zwlr_layer_surface_v1_destroy(seat->zwlr_layer_surface_v1);
-            wl_surface_destroy(seat->layer_wl_surface);
-        }
         zwp_input_popup_surface_v2_destroy(seat->zwp_input_popup_surface_v2);
-        wl_surface_destroy(seat->popup_wl_surface);
+        wl_surface_destroy(seat->wl_surface);
         zwp_virtual_keyboard_v1_destroy(seat->zwp_virtual_keyboard_v1_backup_input);
         zwp_virtual_keyboard_v1_destroy(seat->zwp_virtual_keyboard_v1_passthrough);
         zwp_input_method_keyboard_grab_v2_destroy(
@@ -915,7 +859,6 @@ void zwp_input_method_v2_deactivate(
 {
     struct anthywl_seat *seat = data;
     seat->pending_activate = false;
-    seat->is_composing_popup_visible = true;
 }
 
 void zwp_input_method_v2_surrounding_text(
@@ -960,10 +903,10 @@ void zwp_input_method_v2_done(
     seat->text_change_cause = seat->pending_text_change_cause;
     seat->content_type_hint = seat->pending_content_type_hint;
     seat->content_type_purpose = seat->pending_content_type_purpose;
-    seat->is_composing_popup_visible = !seat->active;
     seat->done_events_received++;
     if (!was_active && seat->active) {
         seat->is_selecting = false;
+        seat->is_composing_popup_visible = false;
         anthywl_buffer_clear(&seat->buffer);
         anthywl_seat_draw_popup(seat);
     }
@@ -1141,7 +1084,6 @@ struct anthywl_global {
     struct wl_interface const *interface;
     int version;
     bool is_singleton;
-    bool is_optional;
     union {
         ptrdiff_t offset;
         void (*callback)(struct anthywl_state *state, void *data);
@@ -1182,14 +1124,6 @@ static struct anthywl_global const globals[] = {
         .version = 1,
         .is_singleton = true,
         .offset = offsetof(struct anthywl_state, wl_shm),
-    },
-    {
-        .name = "zwlr_layer_shell_v1",
-        .interface = &zwlr_layer_shell_v1_interface,
-        .version = 1,
-        .is_singleton = true,
-        .is_optional = true,
-        .offset = offsetof(struct anthywl_state, zwlr_layer_shell_v1),
     },
     {
         .name = "zwp_input_method_manager_v2",
@@ -1284,17 +1218,12 @@ bool anthywl_state_init(struct anthywl_state *state) {
             continue;
         struct wl_proxy **location =
             (struct wl_proxy **)((uintptr_t)state + global->offset);
-        if (*location == NULL && !global->is_optional) {
+        if (*location == NULL) {
             fprintf(
                 stderr, "required interface unsupported by compositor: %s\n",
                 global->name);
             return false;
         }
-    }
-
-    if (state->config.emulate_im_popups && state->zwlr_layer_shell_v1 == NULL) {
-        fprintf(stderr, "warning: input method popup emulation requested "
-            "but layer-shell-v1 unsupported by compositor\n");
     }
 
     anthywl_reload_cursor_theme(state);
@@ -1452,11 +1381,6 @@ struct zwp_input_popup_surface_v2_listener const
     zwp_input_popup_surface_v2_listener =
 {
     .text_input_rectangle = zwp_input_popup_surface_v2_text_input_rectangle,
-};
-
-struct zwlr_layer_surface_v1_listener const zwlr_layer_surface_v1_listener = {
-    .configure = zwlr_layer_surface_v1_configure,
-    .closed = zwlr_layer_surface_v1_closed,
 };
 
 struct wl_seat_listener const wl_seat_listener = {

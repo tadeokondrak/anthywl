@@ -38,12 +38,6 @@ See https://git.sr.ht/~emersion/scfg for details.
 	}
 	```
 
-	*emulate-im-popups*:
-
-	When enabled, anthywl will mirror the contents of input method popups to a
-	layer-shell (overlay) window. This is useful for compositors that do not
-	yet support input method popups.
-
 # ACTIONS
 
 	*enable*:
