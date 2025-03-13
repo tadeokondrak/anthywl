@@ -29,4 +29,4 @@ ninja -C build
 
 ## Configuration
 
-Copy `default_config` to `~/.config/anthywl/config`.
+Copy `data/default_config` to `~/.config/anthywl/config`.
