@@ -624,6 +624,11 @@ static void timespec_correct(struct timespec *ts) {
 
 void anthywl_seat_repeat_timer_callback(struct anthywl_timer *timer) {
     struct anthywl_seat *seat = wl_container_of(timer, seat, repeat_timer);
+    if (seat->repeat_rate <= 0) {
+        wl_list_remove(&timer->link);
+        seat->repeating_keycode = 0;
+        return;
+    }
     seat->repeating_timestamp += 1000 / seat->repeat_rate;
     if (!anthywl_seat_handle_key(seat, seat->repeating_keycode)) {
         wl_list_remove(&timer->link);
@@ -781,6 +786,8 @@ void zwp_input_method_keyboard_grab_v2_key(void *data,
         && xkb_keymap_key_repeats(seat->xkb_keymap, keycode)
         && handled)
     {
+        if (seat->repeat_rate <= 0)
+            return;
         seat->repeating_keycode = keycode;
         seat->repeating_timestamp = time + seat->repeat_delay;
         clock_gettime(CLOCK_MONOTONIC, &seat->repeat_timer.time);
