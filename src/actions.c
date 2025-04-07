@@ -4,6 +4,8 @@
 #include "anthywl.h"
 #include "actions.h"
 
+#define ARRAY_LEN(x) (sizeof (x) / sizeof *(x))
+
 static bool anthywl_seat_handle_enable(struct anthywl_seat *seat) {
     seat->is_composing = true;
     return true;
@@ -192,7 +194,6 @@ static bool anthywl_seat_handle_prev_candidate(struct anthywl_seat *seat) {
     return true;
 }
 
-
 static bool anthywl_seat_handle_next_candidate(struct anthywl_seat *seat) {
     if (!seat->is_selecting)
         return true;
@@ -240,38 +241,34 @@ static bool anthywl_seat_handle_cycle_candidate(struct anthywl_seat *seat) {
 }
 
 enum anthywl_action anthywl_action_from_string(const char *name) {
-    if (strcmp(name, "enable") == 0)
-        return ANTHYWL_ACTION_ENABLE;
-    if (strcmp(name, "disable") == 0)
-        return ANTHYWL_ACTION_DISABLE;
-    if (strcmp(name, "toggle") == 0)
-        return ANTHYWL_ACTION_TOGGLE;
-    if (strcmp(name, "delete-left") == 0)
-        return ANTHYWL_ACTION_DELETE_LEFT;
-    if (strcmp(name, "delete-right") == 0)
-        return ANTHYWL_ACTION_DELETE_RIGHT;
-    if (strcmp(name, "move-left") == 0)
-        return ANTHYWL_ACTION_MOVE_LEFT;
-    if (strcmp(name, "move-right") == 0)
-        return ANTHYWL_ACTION_MOVE_RIGHT;
-    if (strcmp(name, "expand-left") == 0)
-        return ANTHYWL_ACTION_EXPAND_LEFT;
-    if (strcmp(name, "expand-right") == 0)
-        return ANTHYWL_ACTION_EXPAND_RIGHT;
-    if (strcmp(name, "select") == 0)
-        return ANTHYWL_ACTION_SELECT;
-    if (strcmp(name, "compose") == 0)
-        return ANTHYWL_ACTION_COMPOSE;
-    if (strcmp(name, "accept") == 0)
-        return ANTHYWL_ACTION_ACCEPT;
-    if (strcmp(name, "discard") == 0)
-        return ANTHYWL_ACTION_DISCARD;
-    if (strcmp(name, "prev-candidate") == 0)
-        return ANTHYWL_ACTION_PREV_CANDIDATE;
-    if (strcmp(name, "next-candidate") == 0)
-        return ANTHYWL_ACTION_NEXT_CANDIDATE;
-    if (strcmp(name, "cycle-candidate") == 0)
-        return ANTHYWL_ACTION_CYCLE_CANDIDATE;
+    // TODO: use bsearch
+    static struct{
+        char const *name;
+        enum anthywl_action action;
+    } const actions[] = {
+        { "enable", ANTHYWL_ACTION_ENABLE },
+        { "disable", ANTHYWL_ACTION_DISABLE },
+        { "toggle", ANTHYWL_ACTION_TOGGLE },
+        { "delete-left", ANTHYWL_ACTION_DELETE_LEFT },
+        { "delete-right", ANTHYWL_ACTION_DELETE_RIGHT },
+        { "move-left", ANTHYWL_ACTION_MOVE_LEFT },
+        { "move-right", ANTHYWL_ACTION_MOVE_RIGHT },
+        { "expand-left", ANTHYWL_ACTION_EXPAND_LEFT },
+        { "expand-right", ANTHYWL_ACTION_EXPAND_RIGHT },
+        { "select", ANTHYWL_ACTION_SELECT },
+        { "compose", ANTHYWL_ACTION_COMPOSE },
+        { "accept", ANTHYWL_ACTION_ACCEPT },
+        { "discard", ANTHYWL_ACTION_DISCARD },
+        { "prev-candidate", ANTHYWL_ACTION_PREV_CANDIDATE },
+        { "next-candidate", ANTHYWL_ACTION_NEXT_CANDIDATE },
+        { "cycle-candidate", ANTHYWL_ACTION_CYCLE_CANDIDATE },
+    };
+
+    for (size_t i = 0; i < ARRAY_LEN(actions); i++) {
+        if (strcmp(name, actions[i].name) == 0)
+            return actions[i].action;
+    }
+
     return ANTHYWL_ACTION_INVALID;
 }
 
