@@ -240,6 +240,47 @@ static bool anthywl_seat_handle_cycle_candidate(struct anthywl_seat *seat) {
     return true;
 }
 
+static bool anthywl_seat_handle_select_special_candidate(
+    struct anthywl_seat *seat, int idx)
+{
+    if (!seat->is_selecting)
+        return true;
+
+    seat->selected_candidates[seat->current_segment] = idx;
+    seat->is_selecting_popup_visible = true;
+    anthywl_seat_selecting_update(seat);
+
+    return true;
+}
+
+static bool anthywl_seat_handle_select_unconverted_candidate(
+    struct anthywl_seat *seat)
+{
+    return anthywl_seat_handle_select_special_candidate(
+        seat, NTH_UNCONVERTED_CANDIDATE);
+}
+
+static bool anthywl_seat_handle_select_katakana_candidate(
+    struct anthywl_seat *seat)
+{
+    return anthywl_seat_handle_select_special_candidate(
+        seat, NTH_KATAKANA_CANDIDATE);
+}
+
+static bool anthywl_seat_handle_select_hiragana_candidate(
+    struct anthywl_seat *seat)
+{
+    return anthywl_seat_handle_select_special_candidate(
+        seat, NTH_HIRAGANA_CANDIDATE);
+}
+
+static bool anthywl_seat_handle_select_halfkana_candidate(
+    struct anthywl_seat *seat)
+{
+    return anthywl_seat_handle_select_special_candidate(
+        seat, NTH_HALFKANA_CANDIDATE);
+}
+
 enum anthywl_action anthywl_action_from_string(const char *name) {
     // TODO: use bsearch
     static struct{
@@ -262,6 +303,10 @@ enum anthywl_action anthywl_action_from_string(const char *name) {
         { "prev-candidate", ANTHYWL_ACTION_PREV_CANDIDATE },
         { "next-candidate", ANTHYWL_ACTION_NEXT_CANDIDATE },
         { "cycle-candidate", ANTHYWL_ACTION_CYCLE_CANDIDATE },
+        { "select-unconverted-candidate", ANTHYWL_ACTION_SELECT_UNCONVERTED_CANDIDATE },
+        { "select-katakana-candidate", ANTHYWL_ACTION_SELECT_KATAKANA_CANDIDATE },
+        { "select-hiragana-candidate", ANTHYWL_ACTION_SELECT_HIRAGANA_CANDIDATE },
+        { "select-halfkana-candidate", ANTHYWL_ACTION_SELECT_HALFKANA_CANDIDATE },
     };
 
     for (size_t i = 0; i < ARRAY_LEN(actions); i++) {
@@ -291,6 +336,10 @@ static bool(*const anthywl_seat_action_handlers[_ANTHYWL_ACTION_LAST])
     [ANTHYWL_ACTION_PREV_CANDIDATE] = anthywl_seat_handle_prev_candidate,
     [ANTHYWL_ACTION_NEXT_CANDIDATE] = anthywl_seat_handle_next_candidate,
     [ANTHYWL_ACTION_CYCLE_CANDIDATE] = anthywl_seat_handle_cycle_candidate,
+    [ANTHYWL_ACTION_SELECT_UNCONVERTED_CANDIDATE] = anthywl_seat_handle_select_unconverted_candidate,
+    [ANTHYWL_ACTION_SELECT_KATAKANA_CANDIDATE] = anthywl_seat_handle_select_katakana_candidate,
+    [ANTHYWL_ACTION_SELECT_HIRAGANA_CANDIDATE] = anthywl_seat_handle_select_hiragana_candidate,
+    [ANTHYWL_ACTION_SELECT_HALFKANA_CANDIDATE] = anthywl_seat_handle_select_halfkana_candidate,
 };
 
 bool anthywl_seat_handle_action(struct anthywl_seat *seat,
