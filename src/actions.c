@@ -272,7 +272,7 @@ enum anthywl_action anthywl_action_from_string(const char *name) {
     return ANTHYWL_ACTION_INVALID;
 }
 
-static bool(*anthywl_seat_action_handlers[_ANTHYWL_ACTION_LAST])
+static bool(*const anthywl_seat_action_handlers[_ANTHYWL_ACTION_LAST])
     (struct anthywl_seat *) =
 {
     [ANTHYWL_ACTION_ENABLE] = anthywl_seat_handle_enable,
